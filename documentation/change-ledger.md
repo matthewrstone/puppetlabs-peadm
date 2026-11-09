@@ -34,6 +34,7 @@ Not done in Phase 0: nothing outstanding. Items deferred by decision are in the 
 
 | ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
 |---|---|---|---|---|---|---|---|
+| T-1 | Catalog of 29 install, upgrade, downgrade, rollback, failover, migration and node-replacement scenarios with versions from the reports, repro steps and expected behaviour. `scenarios.rb` filters it and emits a table, JSON, a CI matrix, or `test-scenarios.md`. | `spec/acceptance/scenarios.yaml`, `spec/acceptance/scenarios.rb`, `documentation/test-scenarios.md` | Related: each scenario lists its own tickets, for example PE-46598, PE-45758, PE-39789 and PE-42686 | see catalog | Related (supports testing; fixes nothing itself) | `spec/unit/peadm_scenarios_spec.rb` (catalog is valid, doc matches the catalog, matrix only has runnable entries) | uncommitted |
 
 Each scenario in `documentation/test-scenarios.md` lists its own source tickets and cases.
 

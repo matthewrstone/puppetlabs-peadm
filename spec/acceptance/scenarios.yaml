@@ -1,0 +1,543 @@
+# Scenario catalog for on-demand install / upgrade / downgrade / rollback /
+# failover testing. Source of truth for documentation/test-scenarios.md and
+# for the CI matrix emitted by spec/acceptance/scenarios.rb.
+#
+# Fields
+#   id           Stable identifier. Prefix: I install, U upgrade, D downgrade,
+#                R rollback, F failover/role swap, M migrate, B backup/restore,
+#                C compiler/convert, P replica, DB database.
+#   from / to    PE version under test (`to` only for transitions). These are
+#                the versions in the customer report when known. When a report
+#                gives only a release line (e.g. 2025.10) the patch is "x".
+#   ci_from/ci_to  Installable versions CI can use to exercise the same path
+#                when the customer's exact version is not worth testing.
+#   arch         peadm architecture: standard, standard-with-dr, large,
+#                large-with-dr, extra-large, extra-large-with-dr. "unknown"
+#                means the report does not say; `arch_assumed` is used to run it.
+#   ci_arch      Architecture the existing CI workflow uses when it differs from `arch`.
+#   os           OS of the nodes under test, when it matters to the scenario.
+#   fault        Condition to inject, if the scenario is not a happy path.
+#   repro        Steps to reproduce on a fresh test cluster.
+#   expect       What a correct peadm does. Entries tagged (planned) depend on
+#                work in the improvement plan that does not exist yet.
+#   cases        Feedback items the scenario comes from (peadm.csv).
+#   status       ci           runs on pull requests today
+#                ci-partial   a PR workflow runs the same path but does not inject the fault
+#                ci-manual    workflow exists but is workflow_dispatch only (version and
+#                             image are inputs, so it can run on demand)
+#                unit         covered by rspec only
+#                new          needs an acceptance plan written
+#                repro-only   needs an environment or fault we cannot script yet
+#   workflow     Existing workflow that covers it, if any.
+#   priority     1 (ship-blocking) .. 3 (nice to have)
+---
+- id: I-01
+  name: Fresh install, supported architectures
+  category: install
+  from: 2025.12.1
+  arch: [standard-with-dr, large, extra-large-with-dr]
+  os: almalinux-8
+  repro:
+    - provision_test_cluster, then install_test_cluster for each architecture
+    - repeat for 2023.8.13, 2025.12.1 and 2026.0.1 (also RHEL 9 and RHEL 8 FIPS)
+  expect:
+    - install completes and peadm::status reports operational
+  cases: [control]
+  status: ci
+  workflow: test-install-matrix.yaml
+  priority: 1
+
+- id: I-02
+  name: Install with a non-production environment for PE node groups
+  category: install
+  from: 2025.12.1
+  arch: standard-with-dr
+  fault: node_group_environment set to an environment that is not "production"
+  repro:
+    - install with node_group_environment=dev and no production environment on disk
+    - run peadm::status, add_replica, add_compilers, backup
+  expect:
+    - every plan uses the configured environment and none assumes "production"
+  cases: [PE-39789, PE-39465, PE-46598]
+  status: new
+  priority: 1
+
+- id: U-01
+  name: Skip-line upgrade 2023.8 to 2025.12 (pe-puppetdb reload flake)
+  category: upgrade
+  from: 2023.8.8
+  to: 2025.12.0
+  ci_from: 2023.8.13
+  ci_to: 2025.12.1
+  arch: unknown
+  arch_assumed: standard
+  fault: first reload of pe-puppetdb fails during `puppet infrastructure configure`
+  repro:
+    - install 2023.8.x, then peadm::upgrade to 2025.12.x
+    - to inject the fault, add a systemd drop-in on the primary that makes
+      pe-puppetdb ExecReload fail once (for example a script that exits 1 the
+      first time and 0 afterwards)
+    - the report shows installer exit code 6 on the first attempt and a
+      successful reload on later attempts
+  expect:
+    - failure message includes the installer log tail and the failed unit status
+    - (planned) one automatic retry of the configure run, then resume
+  cases: [CASE-002, GJira-1]
+  status: ci-partial
+  workflow: test-upgrade-matrix.yaml
+  priority: 1
+
+- id: U-02
+  name: Upgrade with Code Manager over SSH and an unknown r10k host key
+  category: upgrade
+  from: 2025.10.0
+  to: 2025.11.3
+  arch: unknown
+  arch_assumed: standard-with-dr
+  fault: Code Manager remote is git over SSH and its host key is not in known_hosts
+  repro:
+    - configure Code Manager with an SSH r10k remote and no r10k_known_hosts
+    - upgrade; then `puppet code deploy production --wait`
+  expect:
+    - preflight warns before the upgrade; post-flight deploy check fails loudly
+      with "invalid or unknown remote ssh hostkey"
+  cases: [CASE-008]
+  status: new
+  priority: 2
+
+- id: U-03
+  name: Truncated or corrupt installer tarball
+  category: upgrade
+  from: 2023.8.13
+  to: 2025.12.1
+  arch: standard
+  fault: installer tarball truncated after download, or named differently from puppet-enterprise-<ver>-<platform>.tar.gz
+  repro:
+    - stage a truncated tarball at uploaddir, use download_mode=direct with pe_installer_source pointing at it
+    - run peadm::upgrade
+  expect:
+    - fails in preparation with a clear message, before Puppet or any PE
+      service is stopped
+  cases: [PE-42686, CASE-049, PE-43373]
+  status: new
+  priority: 1
+
+- id: U-04
+  name: Upgrade then eyaml decryption fails (empty-DN PKCS7 certificate)
+  category: upgrade
+  from: 2025.11.0
+  to: 2025.11.2
+  arch: standard
+  fault: eyaml key pair created with `eyaml createkeys --pkcs7-subject '/'`
+  repro:
+    - create eyaml keys with an empty subject, add an ENC[PKCS7,...] value to
+      Hiera data, confirm a catalog compiles on 2025.11.0
+    - upgrade to 2025.11.2 and compile a catalog that looks the value up
+  expect:
+    - (planned) preflight known-issue rule flags the key and the target version
+    - post-flight catalog compile fails the run instead of reporting success
+  notes: GJira-7 (vendored hiera-eyaml 5.0.1) closed this in PE itself; keep the
+    scenario as the template for known-issue rules.
+  cases: [CASE-012, GJira-7]
+  status: new
+  priority: 2
+
+- id: U-05
+  name: Post-upgrade corrective changes and compiler status
+  category: upgrade
+  from: 2025.8.x
+  to: 2025.11.x
+  arch: large
+  repro:
+    - install 2025.8 with two compilers, upgrade with peadm::upgrade
+    - run puppet on the primary twice; reboot the primary; read Puppet Services status
+  expect:
+    - second Puppet run on every infrastructure node reports zero changes
+    - compilers report healthy after a reboot
+  cases: [CASE-017]
+  status: new
+  priority: 2
+
+- id: U-06
+  name: Upgrade a 2023.0 cluster with replica and compilers
+  category: upgrade
+  from: 2023.0.0
+  to: 2023.8.9
+  arch: large-with-dr
+  fault: replica `puppet infrastructure status` reports compilers unreachable
+  repro:
+    - install large-with-dr on 2023.0.0 (older peadm layout, may need convert)
+    - run peadm::status against both primary and replica
+  expect:
+    - preflight reports the replica's view of compilers as a failure, with the
+      likely cause, rather than leaving the operator to open a case
+  cases: [CASE-035, CASE-034]
+  status: new
+  priority: 2
+
+- id: U-07
+  name: Two-hop upgrade of a lab cluster not yet managed by peadm
+  category: upgrade
+  from: 2021.7.0
+  to: 2023.8.9
+  arch: large
+  arch_note: report says "1 compiler"
+  repro:
+    - install 2021.7.0 with the PE installer (not peadm) plus one compiler
+    - peadm::convert, upgrade to 2023.0.0, then upgrade to 2023.8.9
+  expect:
+    - each hop passes; the plan states the supported hop when a skip is unsafe
+  cases: [CASE-039, CASE-040]
+  status: new
+  priority: 2
+
+- id: U-08
+  name: Patch-level upgrade must bring compilers along
+  category: upgrade
+  from: 2023.8.6
+  to: 2023.8.9
+  ci_from: 2023.8.13
+  ci_to: 2023.8.13
+  arch: large
+  fault: none; the customer ran the PE installer on the primary only
+  repro:
+    - install 2023.8.6 with compilers
+    - upgrade with peadm::upgrade (and, for contrast, with the bare installer)
+  expect:
+    - peadm::upgrade leaves every infrastructure node on the same PE and agent version
+    - the bare-installer path shows the "compiler has a PE version of ..." error
+  notes: CI has no earlier patch of 2023.8 to install; confirm an older
+    installable patch before scheduling.
+  cases: [CASE-045]
+  status: new
+  priority: 2
+
+- id: U-09
+  name: Upgrade with legacy compilers and the legacy OID extension
+  category: upgrade
+  from: 2023.8.x
+  to: 2023.8.8
+  ci_from: 2025.12.1
+  ci_to: 2026.0.1
+  arch: extra-large-with-dr
+  ci_arch: large-with-dr with one legacy compiler (what test-legacy-upgrade.yaml runs)
+  arch_note: report lists primary, replica, two PostgreSQL nodes and four compilers
+  fault: compilers carry the legacy compiler OID (1.3.6.1.4.1.34380.1.1.9814)
+    set to false
+  repro:
+    - install with legacy compilers, set the 9814 extension to false on them
+    - run peadm::upgrade
+  expect:
+    - the legacy-compiler check explains what it found and what to do
+  cases: [CASE-050, GJira-17, PE-40239, PE-36355, PE-36212]
+  status: ci-partial
+  workflow: test-legacy-upgrade.yaml
+  priority: 2
+
+- id: U-10
+  name: Patch upgrade to add target OS support
+  category: upgrade
+  from: 2023.8.10
+  to: 2023.8.12
+  arch: unknown
+  arch_assumed: standard
+  os: ubuntu-2404
+  repro:
+    - install 2023.8.x on Ubuntu, upgrade to the patch release
+  expect:
+    - control scenario: succeeds
+  notes: no Ubuntu lane exists in CI today.
+  cases: [CASE-001]
+  status: new
+  priority: 3
+
+- id: U-11
+  name: Installer pre-check cannot find is_cloud_database.rb
+  category: upgrade
+  from: 2025.8.x
+  to: 2025.10.x
+  arch: unknown
+  arch_assumed: standard
+  repro:
+    - cause is not stated in the report. Start by running the plan with a
+      tarball staged by hand and compare the extracted tree
+  expect:
+    - preflight catches a damaged or mismatched installer before upgrade
+  cases: [CASE-046]
+  status: repro-only
+  priority: 3
+
+- id: U-12
+  name: Target version newer than the module supports
+  category: upgrade
+  from: 2025.11.3
+  to: 2025.12.0
+  arch: standard
+  fault: module's newest supported version is older than the target
+  repro:
+    - run assert_supported_pe_version with a target beyond the module's newest
+  expect:
+    - fails with a message that says which peadm release adds support
+  cases: [CASE-003, PE-47850]
+  status: unit
+  priority: 1
+
+- id: D-01
+  name: Downgrade attempt is blocked early
+  category: downgrade
+  from: 2025.11.3
+  to: 2025.10.0
+  arch: unknown
+  arch_assumed: standard
+  fault: target version is older than the installed version
+  repro:
+    - on an installed 2025.11.3 cluster run peadm::upgrade version=2025.10.0
+  expect:
+    - fails before any service is stopped; message points to restore-from-backup
+    - the installer's own rule is chronological (release date), not only the
+      version number, so a lower number can also be refused
+  cases: [CASE-009]
+  status: unit
+  priority: 1
+
+- id: R-01
+  name: Roll back a failed upgrade from a peadm backup
+  category: rollback
+  from: 2023.8.8
+  to: 2023.8.9
+  ci_from: 2023.8.13
+  ci_to: 2025.12.1
+  arch: unknown
+  arch_assumed: standard-with-dr
+  fault: upgrade stopped partway (for example kill the plan after upgrade-primary)
+  repro:
+    - peadm::backup, then peadm::upgrade; interrupt after upgrade-primary
+    - attempt recovery to the starting version
+  expect:
+    - (planned) peadm::rollback reinstalls the previous version, restores the
+      backup, rebuilds replica and compilers and verifies
+    - today this is not possible without manual steps
+  cases: [CASE-036, CASE-009]
+  status: new
+  priority: 1
+
+- id: R-02
+  name: Roll back by VM snapshot after a bad upgrade
+  category: rollback
+  from: 2025.11.0
+  to: 2025.11.2
+  arch: standard
+  repro:
+    - snapshot the primary, upgrade, hit a regression (see U-04), revert
+  expect:
+    - (planned) snapshot hook runs before upgrade and on rollback
+    - after revert the cluster verifies clean and agents resume
+  cases: [CASE-012]
+  status: new
+  priority: 2
+
+- id: F-01
+  name: Planned role swap on 2023.8
+  category: failover
+  from: 2023.8.13
+  arch: standard-with-dr
+  repro:
+    - promote the replica, uninstall PE on the old primary, install the agent,
+      add it back as the replica with peadm::add_replica
+    - run peadm::status and a code deploy from the new primary
+  expect:
+    - the new primary classifies correctly and availability groups follow the hosts
+  cases: [CASE-015, CASE-023, CASE-029, PE-43987]
+  status: new
+  notes: test-failover.yaml is an unplanned failover (primary shut down), not a planned swap.
+  priority: 1
+
+- id: F-02
+  name: Planned role swap on 2025.x, and on a mixed estate
+  category: failover
+  from: 2025.12.1
+  arch: standard-with-dr
+  repro:
+    - repeat F-01 on 2025.12.x
+    - separately confirm the same steps work when production is still 2023.8
+      and non-production is 2025.x (the customer rehearsed on the newer line)
+  expect:
+    - same procedure on both lines
+  cases: [CASE-023]
+  status: new
+  notes: test-failover.yaml is an unplanned failover (primary shut down), not a planned swap.
+  priority: 1
+
+- id: F-03
+  name: Unplanned failure of the primary
+  category: failover
+  from: 2025.12.1
+  arch: extra-large-with-dr
+  fault: primary powered off
+  repro:
+    - "run test-failover.yaml, which shuts down the primary, deletes its certname from
+      the primary PostgreSQL node, runs `puppet infra promote replica`, then adds a spare replica"
+  expect:
+    - (planned) peadm::failover does the promote and re-asserts classification
+    - the cluster verifies clean before the replacement replica exists
+  cases: [CASE-015, PE-39742]
+  status: ci-manual
+  workflow: test-failover.yaml
+  priority: 1
+
+- id: F-04
+  name: Role swap across an OS upgrade (mixed OS pair)
+  category: failover
+  from: 2025.10.0
+  arch: standard-with-dr
+  os: ubuntu-2204 primary with ubuntu-2404 replica
+  repro:
+    - rebuild the replica on Ubuntu 24.04, swap roles, rebuild the old primary on 24.04
+    - agents point at a load balancer or DNS name; no server_list on agents
+  expect:
+    - agents reach the new primary with their existing certificates
+    - mixed-OS window is a documented, tested state
+  cases: [CASE-024, CASE-048]
+  status: new
+  priority: 2
+
+- id: F-05
+  name: Cert-loading timeout while repurposing the old primary
+  category: failover
+  from: 2023.8.x
+  arch: standard-with-dr
+  fault: slow CA responses while the old primary is rebuilt as a replica
+  repro:
+    - cause is documented only as a timeout in an earlier APAC exercise;
+      reproduce by adding latency to CA requests on the new primary
+  expect:
+    - CA query timeouts are configurable and the plan resumes cleanly
+  cases: [CASE-029, GJira-11, CASE-047]
+  status: repro-only
+  priority: 2
+
+- id: M-01
+  name: Migrate to a new OS and version
+  category: migrate
+  from: 2023.8.8
+  to: 2023.8.9
+  ci_from: 2025.12.1
+  ci_to: 2026.0.1
+  arch: unknown
+  arch_assumed: standard
+  os: rocky-8 to rocky-9 (CI uses almalinux)
+  repro:
+    - peadm::migrate from the old primary to new hosts on the new OS
+    - check /etc/yum.repos.d/pe.repo on agents afterwards
+  expect:
+    - agents keep resolving the pe_repo name they were built with
+  cases: [CASE-048, CASE-038]
+  status: ci-partial
+  workflow: test-migration.yaml
+  priority: 2
+
+- id: M-02
+  name: Backup, restore and migrate with a non-production environment
+  category: migrate
+  from: 2025.12.1
+  arch: standard-with-dr
+  fault: infrastructure uses an environment other than production; default
+    classifier groups customised
+  repro:
+    - run backup and restore, then migrate, on a cluster from I-02
+  expect:
+    - default classifier groups are restored with their classification
+  cases: [PE-46598, PE-45758]
+  status: new
+  priority: 1
+
+- id: M-03
+  name: New stack built on an existing shared CA
+  category: migrate
+  from: 2025.6.x
+  arch: standard
+  fault: console-cert and saml-cert already exist on the shared CA
+  repro:
+    - stand up a CA from a 2023.8 stack, then install a new stack that points at it
+  expect:
+    - documented as supported or unsupported; today the installer cannot reissue
+      the internal certificates
+  cases: [CASE-044]
+  status: repro-only
+  priority: 3
+
+- id: B-01
+  name: Backup and restore
+  category: backup-restore
+  from: 2026.0.1
+  arch: extra-large
+  os: almalinux-8
+  repro:
+    - test_backup then test_restore
+  expect:
+    - restored cluster passes peadm::status
+  cases: [control, PE-36230]
+  status: ci
+  workflow: test-backup-restore.yaml
+  priority: 1
+
+- id: C-01
+  name: Replace a compiler when the A/B pins are duplicated
+  category: compiler
+  from: 2025.12.1
+  arch: large-with-dr
+  fault: two nodes pinned to availability group A in the PuppetDB database node group
+  repro:
+    - pin a second node to group A in PE PuppetDB Database, run peadm::add_compilers
+  expect:
+    - preflight names the duplicate pin and the fix before anything changes
+    - (planned) repair_classification fixes it
+  cases: [CASE-016, PE-43572, CASE-042]
+  status: new
+  priority: 1
+
+- id: C-02
+  name: Convert a cluster with several compilers
+  category: convert
+  from: 2023.8.x
+  arch: large-with-dr
+  fault: compiler group lists three puppetdb hosts but two ports
+  repro:
+    - run peadm::convert on a large-with-dr cluster with three compilers; then
+      compile on a compiler
+  expect:
+    - pe_format_urls does not fail; hosts and ports match
+  cases: [CASE-041, PE-44017, PE-41637]
+  status: new
+  priority: 2
+
+- id: P-01
+  name: Re-add a replica after the VM was auto-replaced
+  category: replica
+  from: 2023.8.13
+  arch: standard-with-dr
+  fault: replica VM recreated with the same certname without a forget first
+  repro:
+    - delete and recreate the replica VM, run peadm::add_replica
+  expect:
+    - run does not report success while the replica is unclassified or absent
+      from `puppet infrastructure status`
+  cases: [CASE-022, PE-43490]
+  status: ci-partial
+  workflow: test-add-replica-matrix.yaml
+  priority: 1
+
+- id: DB-01
+  name: Replace a failed PostgreSQL node, including the primary-side one
+  category: database
+  from: 2025.12.1
+  arch: extra-large-with-dr
+  fault: failed_postgresql_host equals primary_postgresql_host; replacement lacks trusted extensions
+  repro:
+    - destroy the primary PostgreSQL node and run peadm::replace_failed_postgresql
+  expect:
+    - replacement is classified as a PostgreSQL node and rejoins as a replica
+  cases: [CASE-020, PE-41341]
+  status: ci-partial
+  workflow: test-replace-failed-postgresql.yaml
+  priority: 1
