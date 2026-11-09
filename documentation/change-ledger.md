@@ -1,0 +1,45 @@
+# Change ledger
+
+Every change made under the install/upgrade/rollback/failover improvement work, with the
+tickets it addresses. Source of the tickets: the peadm feedback file (support cases and Jira).
+
+**How to read it**
+
+- **Fixes** means the change resolves what the ticket describes.
+- **Mitigates** means it reduces the impact or makes the problem diagnosable, without removing the cause.
+- **Related** means the ticket describes the same area but the change was not made for it.
+- **None filed** means the defect was found while reviewing the code and has no ticket yet.
+- `CASE-nnn` are support cases (Salesforce), which are not Jira tickets. A change that only
+  cites a case has no Jira reference and needs a ticket before it ships.
+
+**Keeping it current.** Add a row in the same commit as the change. Start the commit subject
+with the ticket, as in `(PE-47850) Read supported PE range from data file`. Fill in the commit
+column when the change is committed.
+
+## Phase 0: bug fixes and quick wins
+
+| ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
+|---|---|---|---|---|---|---|---|
+
+Not done in Phase 0: nothing outstanding. Items deferred by decision are in the plan file.
+
+## Test scenario catalog
+
+| ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
+|---|---|---|---|---|---|---|---|
+
+Each scenario in `documentation/test-scenarios.md` lists its own source tickets and cases.
+
+## Documentation
+
+| ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
+|---|---|---|---|---|---|---|---|
+| D-1 | This ledger. | `documentation/change-ledger.md` | | | | | uncommitted |
+
+## Tickets that need filing
+
+These changes fixed real defects that have no ticket. File one for each so the commit subject can carry its ID.
+
+- P0-1: `peadm::convert` step name mismatch skips all steps on resume.
+- P0-2: `peadm::upgrade` cannot resume at `preparation`, and resumed runs leave Puppet running.
+- P0-3: `peadm::upgrade` has no early downgrade check (CASE-009 has no Jira ticket).
