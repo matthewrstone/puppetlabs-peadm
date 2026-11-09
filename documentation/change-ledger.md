@@ -20,6 +20,7 @@ column when the change is committed.
 
 | ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
 |---|---|---|---|---|---|---|---|
+| P0-1 | `peadm::convert` step is named `modify-primary-certs`, matching `Peadm::ConvertSteps`. Before, `begin_at_step=modify-primary-certs` matched no step and skipped them all, including the A/B pin sanity check. | `plans/convert.pp`, `REFERENCE.md` | None filed. Related: PE-44017, PE-41637 (convert failures) | | None filed | Existing convert specs pass; no new spec yet | uncommitted |
 
 Not done in Phase 0: nothing outstanding. Items deferred by decision are in the plan file.
 

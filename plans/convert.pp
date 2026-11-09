@@ -163,13 +163,13 @@ plan peadm::convert (
   # host was passed as primary/replica after a role swap).
   #
   # Only enforced on a fresh run (or one explicitly restarted at the first
-  # step). A run resumed with begin_at_step past 'modify-primary-cert' may be
+  # step). A run resumed with begin_at_step past 'modify-primary-certs' may be
   # observing this plan's own partial progress from an earlier, interrupted
   # invocation (e.g. the primary got stamped but the replica didn't before an
   # orchestrator hiccup) rather than genuine operator error, and re-running
   # this validation would permanently lock the operator out with no way to
   # resume.
-  if ($begin_at_step == undef) or ($begin_at_step == 'modify-primary-cert') {
+  if ($begin_at_step == undef) or ($begin_at_step == 'modify-primary-certs') {
     if ($replica_certname) and (($primary_group in ['A', 'B']) or ($replica_group in ['A', 'B'])) {
       if $primary_group == $replica_group {
 # lint:ignore:strict_indent
@@ -288,7 +288,7 @@ plan peadm::convert (
   # Modify csr_attributes.yaml and insert the peadm-specific OIDs to identify
   # each server's role and availability group
 
-  peadm::plan_step('modify-primary-cert') || {
+  peadm::plan_step('modify-primary-certs') || {
     # If PE version is older than 2019.7
     if (versioncmp($pe_version, '2019.7.0') < 0) {
       apply($primary_target) {
