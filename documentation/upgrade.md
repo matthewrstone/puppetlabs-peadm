@@ -101,6 +101,8 @@ This plan is broken down into steps. Normally, the plan runs through all the ste
 
 The `begin_at_step` parameter can be used to facilitate re-running this plan after a failed attempt, skipping past any steps that already completed successfully on the first try and picking up again at the step specified. The step name to resume at can be read from the previous run logs. A full list of available values for this parameter can be viewed by running `bolt plan show peadm::upgrade`.
 
+When you resume at a later step, the Puppet agent is stopped again on all infrastructure nodes before the plan continues, because the skipped `preparation` step is where it is normally stopped.
+
 ## Manual Upgrades
 
 In the event a manual upgrade is required, the steps may be followed along by reading directly from [the upgrade plan](../plans/upgrade.pp), which is itself the most accurate technical description of the steps required. In general form, the upgrade process is as given below.

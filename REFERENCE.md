@@ -1209,7 +1209,7 @@ Alias of `Variant[Pattern[/\A[^[:space:],]+\z/], Target, Array[Peadm::SingleTarg
 
 type for the different steps where the peadm::upgrade plan can be started
 
-Alias of `Enum['upgrade-primary', 'upgrade-node-groups', 'upgrade-primary-compilers', 'upgrade-replica', 'upgrade-replica-compilers', 'finalize']`
+Alias of `Enum['preparation', 'upgrade-primary', 'upgrade-node-groups', 'upgrade-primary-compilers', 'upgrade-replica', 'upgrade-replica-compilers', 'finalize']`
 
 ## Tasks
 

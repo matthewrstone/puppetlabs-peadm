@@ -214,6 +214,13 @@ plan peadm::upgrade (
     == 'pe_compiler')
   }
 
+  # A resumed run skips the preparation step below, which is where Puppet is
+  # stopped on the infrastructure nodes. Make sure it is still stopped, so an
+  # agent run can't interfere with the remaining steps.
+  if $begin_at_step and $begin_at_step != 'preparation' {
+    run_command('systemctl stop puppet', $all_targets)
+  }
+
   peadm::plan_step('preparation') || {
     if $download_mode == 'bolthost' {
       # Download the PE tarball on the nodes that need it
