@@ -254,6 +254,12 @@ plan peadm::upgrade (
       )
     }
 
+    # Make sure the staged tarball is intact before anything is stopped, so a
+    # truncated download fails here instead of partway through the upgrade.
+    run_task('peadm::verify_tarball', $pe_installer_targets,
+      path => $upload_tarball_path,
+    )
+
     # Shut down Puppet on all infra targets. Avoid using the built-in service
     # task for idempotency reasons. When the orchestrator has been upgraded but
     # not all pxp-agents have, the built-in service task does not work over pcp.

@@ -101,7 +101,7 @@ This plan is broken down into steps. Normally, the plan runs through all the ste
 
 The `begin_at_step` parameter can be used to facilitate re-running this plan after a failed attempt, skipping past any steps that already completed successfully on the first try and picking up again at the step specified. The step name to resume at can be read from the previous run logs. A full list of available values for this parameter can be viewed by running `bolt plan show peadm::upgrade`.
 
-When you resume at a later step, the Puppet agent is stopped again on all infrastructure nodes before the plan continues, because the skipped `preparation` step is where it is normally stopped.
+The first step, `preparation`, stages and verifies the PE installer tarball and stops the Puppet agent on the infrastructure nodes. A corrupt or truncated tarball stops the plan here, before any PE service is stopped. When you resume at a later step, the Puppet agent is stopped again on all infrastructure nodes before the plan continues.
 
 ## Manual Upgrades
 

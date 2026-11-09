@@ -150,6 +150,35 @@ describe 'peadm::upgrade' do
     expect(result.value.msg).to match(%r{run the Convert plan})
   end
 
+  context 'when verifying the staged installer tarball' do
+    before(:each) do
+      allow_standard_non_returning_calls
+      expect_task('peadm::read_file')
+        .with_params('path' => '/opt/puppetlabs/server/pe_build')
+        .always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').always_return({ 'content' => '{}' })
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+    end
+
+    it 'verifies the tarball on the primary before stopping Puppet' do
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::verify_tarball').be_called_times(1)
+
+      expect(run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9')).to be_ok
+    end
+
+    # PE-42686: a corrupt tarball must stop the plan before any service is touched.
+    it 'fails before stopping Puppet when the tarball is corrupt' do
+      expect_task('peadm::verify_tarball').error_with('msg' => 'gzip integrity check failed', 'kind' => 'puppetlabs.tasks/task-error')
+      expect_command('systemctl stop puppet').not_be_called
+
+      result = run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9')
+
+      expect(result).not_to be_ok
+    end
+  end
+
   it 'fails early when the requested version is older than the installed version' do
     allow_standard_non_returning_calls
     expect_task('peadm::read_file')

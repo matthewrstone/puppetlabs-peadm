@@ -1,0 +1,15 @@
+{
+  "description": "Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it",
+  "parameters": {
+    "path": {
+      "type": "String",
+      "description": "Path to the Puppet Enterprise tarball"
+    }
+  },
+  "input_method": "environment",
+  "supports_noop": false,
+  "private": true,
+  "implementations": [
+    {"name": "verify_tarball.sh", "requirements": ["shell"]}
+  ]
+}

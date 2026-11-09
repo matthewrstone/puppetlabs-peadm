@@ -106,6 +106,7 @@ before they get overwritten by a classification reassertion
 * [`transform_classification_groups`](#transform_classification_groups): Transform the user groups from a source backup to a list of groups on the target server
 * [`update_pe_master_rules`](#update_pe_master_rules): Updates the PE Master group rules to support 'pe_compiler_legacy' as a pp_auth_role
 * [`validate_rbac_token`](#validate_rbac_token): Check an RBAC token stored in a file is valid
+* [`verify_tarball`](#verify_tarball): Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it
 * [`wait_until_service_ready`](#wait_until_service_ready): Return when the orchestrator service is healthy, or timeout after 15 seconds
 
 ### Plans
@@ -1876,6 +1877,20 @@ Check an RBAC token stored in a file is valid
 Data type: `Optional[String]`
 
 The path to the token file to use
+
+### <a name="verify_tarball"></a>`verify_tarball`
+
+Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it
+
+**Supports noop?** false
+
+#### Parameters
+
+##### `path`
+
+Data type: `String`
+
+Path to the Puppet Enterprise tarball
 
 ### <a name="wait_until_service_ready"></a>`wait_until_service_ready`
 
