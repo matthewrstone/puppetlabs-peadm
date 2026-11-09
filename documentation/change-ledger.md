@@ -22,6 +22,7 @@ column when the change is committed.
 |---|---|---|---|---|---|---|---|
 | P0-1 | `peadm::convert` step is named `modify-primary-certs`, matching `Peadm::ConvertSteps`. Before, `begin_at_step=modify-primary-certs` matched no step and skipped them all, including the A/B pin sanity check. | `plans/convert.pp`, `REFERENCE.md` | None filed. Related: PE-44017, PE-41637 (convert failures) | | None filed | Existing convert specs pass; no new spec yet | uncommitted |
 | P0-2 | `preparation` is an allowed `begin_at_step` for `peadm::upgrade`. A run resumed at a later step stops Puppet on all infrastructure nodes, since the skipped `preparation` step was the only place that happened. | `plans/upgrade.pp`, `types/upgradesteps.pp`, `REFERENCE.md` | None filed. Related: PE-37220 (upgrade reports complete after failed step) | CASE-002, CASE-011 | None filed | Upgrade specs pass; no new spec for the resume path yet | uncommitted |
+| P0-3 | `peadm::upgrade` fails right after reading the installed version when the target version is older, before anything is stopped. The message points to restoring from a backup. It does not catch the installer's release-date rule when the version number is higher. | `plans/upgrade.pp` | None filed | CASE-009 | None filed | `spec/plans/upgrade_spec.rb` (downgrade is refused) | uncommitted |
 
 Not done in Phase 0: nothing outstanding. Items deferred by decision are in the plan file.
 

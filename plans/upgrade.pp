@@ -175,6 +175,23 @@ plan peadm::upgrade (
     path => '/opt/puppetlabs/server/pe_build',
   ).first['content']
 
+  # The PE installer refuses to move to an older version (or one released
+  # before the installed one), so fail early rather than partway through the
+  # upgrade, after services on the primary have already been stopped.
+  $installed_pe_version = $current_pe_version ? {
+    String  => $current_pe_version.strip,
+    default => undef,
+  }
+  if $installed_pe_version =~ Peadm::Pe_version and $_version =~ SemVerRange("< ${installed_pe_version}") {
+# lint:ignore:strict_indent
+    fail_plan(@("DOWNGRADE"/L))
+      Requested PE version ${_version} is older than the installed version \
+      ${installed_pe_version}. The PE installer does not support downgrades. To \
+      return to an earlier version, restore from a backup taken before the upgrade.
+      | DOWNGRADE
+# lint:endignore
+  }
+
   # Ensure needed trusted facts are available
   if $cert_extensions.any |$_,$cert| {
     [peadm::oid('peadm_role'), 'pp_auth_role'].all |$ext| { $ext in $cert and $cert[$ext] == undef } or
