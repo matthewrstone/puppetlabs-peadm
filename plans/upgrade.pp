@@ -158,7 +158,12 @@ plan peadm::upgrade (
 
   $rules_check = run_task('peadm::check_pe_master_rules', $primary_target).first.value
   unless $rules_check['updated'] {
-    fail_plan('Please run the Convert plan to convert your Puppet infrastructure to be managed by this version of PEADM.')
+# lint:ignore:strict_indent
+    fail_plan(@("HEREDOC"/L))
+      Please run the Convert plan to convert your Puppet infrastructure to be \
+      managed by this version of PEADM. Reason: ${rules_check['message']}
+      | HEREDOC
+# lint:endignore
   }
 
   # Gather certificate extension information from all systems

@@ -96,6 +96,13 @@ class CheckPeMasterRules
     client
   end
 
+  LEGACY_COMPILER_OID = '1.3.6.1.4.1.34380.1.1.9814'
+
+  # Finds nodes still carrying the retired peadm_legacy_compiler extension.
+  # `peadm::convert` treats the value 'false' as a modern compiler and only
+  # strips the extension, so such nodes are reported separately in
+  # 'ignored_nodes' and do not count as needing conversion. Any other value
+  # ('true', or anything unexpected) does.
   def check_nodes_with_legacy_compiler_oid
     pdb = https_pdb_client
     pdb_request = Net::HTTP::Get.new('/pdb/query/v4')
@@ -112,11 +119,15 @@ class CheckPeMasterRules
     end
 
     nodes = JSON.parse(response.body)
+    modern, legacy = nodes.partition do |n|
+      n.dig('trusted.extensions', LEGACY_COMPILER_OID).to_s == 'false'
+    end
 
     {
-      'nodes_found' => !nodes.empty?,
-      'count' => nodes.size,
-      'nodes' => nodes.map { |n| n['certname'] }
+      'nodes_found' => !legacy.empty?,
+      'count' => legacy.size,
+      'nodes' => legacy.map { |n| n['certname'] },
+      'ignored_nodes' => modern.map { |n| n['certname'] }
     }
   rescue JSON::ParserError => e
     raise "Invalid JSON response from PuppetDB: #{e.message}"
@@ -137,7 +148,9 @@ class CheckPeMasterRules
     message = if !rules_updated
                 'PE Master rules need to be updated to support pe_compiler_legacy'
               elsif legacy_compiler_nodes['nodes_found']
-                'PE Master rules are updated, but nodes with legacy compiler OID still exist'
+                "PE Master rules are updated, but #{legacy_compiler_nodes['count']} node(s) still have the legacy compiler " \
+                  "OID (#{LEGACY_COMPILER_OID}) set to a value other than 'false': " \
+                  "#{legacy_compiler_nodes['nodes'].join(', ')}. Run the peadm::convert plan to migrate them."
               else
                 'PE Master rules have been updated with pe_compiler_legacy support and no legacy compiler OIDs found'
               end
