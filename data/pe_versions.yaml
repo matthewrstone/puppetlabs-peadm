@@ -1,0 +1,6 @@
+# PE versions this release of peadm supports. Read by
+# peadm::supported_pe_versions; bump `newest` when a new PE line is tested.
+# Any patch release within the range is supported (2026.0 means 2026.0.x).
+---
+oldest: '2019.7'
+newest: '2026.0'

@@ -20,8 +20,9 @@ function peadm::assert_supported_pe_version (
 # lint:endignore
   }
 
-  $oldest = '2019.7'
-  $newest = '2026.0'
+  $range  = peadm::supported_pe_versions()
+  $oldest = $range['oldest']
+  $newest = $range['newest']
   $supported = ($version =~ SemVerRange(">= ${oldest} <= ${newest}"))
 
   if $permit_unsafe_versions {
@@ -43,13 +44,15 @@ function peadm::assert_supported_pe_version (
   elsif (!$supported) {
 # lint:ignore:strict_indent
     fail(@("REASON"/L))
-      This version of the puppetlabs-peadm module does not support PE ${version}.
+      This version of the puppetlabs-peadm module (${peadm::module_version()}) supports \
+      PE ${oldest} through ${newest}, and does not support PE ${version}.
 
       For PE versions older than ${oldest}, please check to see if version 1.x \
       or 2.x of the puppetlabs-peadm module supports your PE version.
 
-      For PE versions newer than ${newest}, check to see if a new version of peadm \
-      exists which supports that version of PE.
+      For PE versions newer than ${newest}, upgrade to a release of the puppetlabs-peadm \
+      module that supports that version of PE. To proceed without support, \
+      set permit_unsafe_versions=true.
 
       | REASON
 # lint:endignore

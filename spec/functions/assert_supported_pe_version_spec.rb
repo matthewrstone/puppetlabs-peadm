@@ -39,6 +39,13 @@ describe 'peadm::assert_supported_pe_version' do
     it 'rejects PE versions that are too old' do
       is_expected.to run.with_params('2018.1.9').and_raise_error(Puppet::ParseError, %r{This\ version\ of\ the})
     end
+
+    # CASE-003: say what is supported, which peadm is running, and how to proceed.
+    it 'names the supported range and the escape hatch when the version is too new' do
+      is_expected.to run.with_params('2035.0.0').and_raise_error(
+        Puppet::ParseError, %r{supports\ PE\ 2019\.7\ through\ 2026\.0.*does\ not\ support\ PE\ 2035\.0\.0.*permit_unsafe_versions=true}m
+      )
+    end
   end
 
   context 'valid PE versions' do
