@@ -1,11 +1,27 @@
+# @summary Prepare a new PostgreSQL node for an existing primary and its compilers
+#
+# @param db_host
+#   The node to initialise as the PE PostgreSQL host.
+# @param install_pe
+#   Run the PE installer on the database node.
+# @param pe_version
+#   The PE version to install when install_pe is set.
+# @param pe_platform
+#   The installer platform to download when install_pe is set.
+# @param wait_time
+#   Seconds to wait for the inventory targets to become reachable before
+#   failing. Defaults to 120, which is Bolt's own default for
+#   wait_until_available.
+#
 plan peadm::util::init_db_server(
   String[1] $db_host,
   Boolean $install_pe = false,
   String[1] $pe_version = '2023.5.0',
   String[1] $pe_platform = 'el-8-x86_64',
+  Integer[1] $wait_time = 120,
 ) {
   $t = get_targets('*')
-  wait_until_available($t)
+  wait_until_available($t, wait_time => $wait_time)
 
   $db_target = get_target($db_host)
   parallelize($t + $db_target) |$target| {
@@ -71,13 +87,23 @@ plan peadm::util::init_db_server(
     # staging a puppet.conf file.
 
     peadm::file_content_upload($primary_postgresql_pe_conf, '/tmp/pe.conf', $db_target)
+    # pe.conf carries console_admin_password: root-only while it exists
+    run_command('chmod 0600 /tmp/pe.conf', $db_target)
 
     # Run the PE installer on the puppetdb database hosts
-    run_task('peadm::pe_install', $db_target,
+    $pe_install_result = run_task('peadm::pe_install', $db_target,
       tarball               => $upload_tarball_path,
       peconf                => '/tmp/pe.conf',
       puppet_service_ensure => 'stopped',
+      _catch_errors         => true,
     )
+
+    # The installer was the last reader of pe.conf. Remove it whether the
+    # installer succeeded or failed, then fail with the installer's own error.
+    run_command('rm -f /tmp/pe.conf', $db_target)
+    unless $pe_install_result.ok {
+      fail_plan($pe_install_result.error_set.first.error)
+    }
   }
 
   run_plan('peadm::subplans::component_install', $db_target, {

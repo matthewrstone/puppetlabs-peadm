@@ -147,6 +147,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/plans/install_spec.rb spec/plans/subplans/configure_spec.rb spec/plans/subplans/install_spec.rb` passes. The static example reads the `node_manager` declaration in `plans/subplans/configure.pp` (BoltSpec cannot see parameters inside an `apply()` block); what the class does with a non-production value is covered by `spec/classes/setup/node_manager_spec.rb`. The install examples pass `service_ready_timeout => 300` and see it, and the environment, reach both subplans.
 - **Scenario:** I-02. **Status:** spec shows it, not cluster-verified.
 
+### P1-17 /tmp/pe.conf with the console password stayed on disk after install
+
+- **Complaint:** found in code review (CONCERNS.md; no ticket filed). `peadm::subplans::install` uploaded a `pe.conf` containing `console_admin_password` to `/tmp/pe.conf` on the primary and the PostgreSQL hosts and never removed it, so the password stayed in a shared temp directory after the install, and after a failed install too. `peadm::util::init_db_server` did the same.
+- **Fix:** the P1-17 commit (ledger row P1-17). The file is set to mode 0600 right after upload and removed as soon as the last installer run has read it, and also when an installer run fails (the plan then fails with the installer's own error). `peadm::util::init_db_server` does the same and takes a `wait_time` (default 120) for its availability wait. Fixes it. A plan killed mid-run can still leave the file, at mode 0600.
+- **Reproduce (before):** after an install on the parent of the P1-17 commit, `ls -l /tmp/pe.conf` on the primary shows the file. Without a cluster, copy the new `spec/plans/subplans/install_spec.rb` and `spec/plans/util/init_db_server_spec.rb` onto the parent and run them with `-e '/tmp/pe.conf'`: the chmod, removal and failing-installer examples fail.
+- **Demonstrate (after):** `bundle exec rspec spec/plans/subplans/install_spec.rb spec/plans/util/init_db_server_spec.rb` passes. The examples record every command and installer task in order and assert the chmod comes before the installer, the removal comes after the last one (and before the RBAC token step), and a failing `pe_install` removes the file and fails with Bolt's run-failure. On a cluster, after `peadm::install`, `ls /tmp/pe.conf` on the primary reports no such file (the node check in plan 01-13).
+- **Scenario:** I-01. **Status:** spec shows it. Node check pending plan 01-13.
+
 ## Template
 
 ```markdown

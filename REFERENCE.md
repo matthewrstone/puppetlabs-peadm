@@ -135,7 +135,7 @@ Supported use cases:
 * [`peadm::restore_ca`](#peadm--restore_ca)
 * [`peadm::status`](#peadm--status): Return status information from one or more PE clusters in a table format
 * [`peadm::upgrade`](#peadm--upgrade): Upgrade a PEAdm-managed cluster
-* [`peadm::util::init_db_server`](#peadm--util--init_db_server)
+* [`peadm::util::init_db_server`](#peadm--util--init_db_server): Prepare a new PostgreSQL node for an existing primary and its compilers
 
 #### Private Plans
 
@@ -3295,7 +3295,7 @@ Default value: `false`
 
 ### <a name="peadm--util--init_db_server"></a>`peadm::util::init_db_server`
 
-The peadm::util::init_db_server class.
+Prepare a new PostgreSQL node for an existing primary and its compilers
 
 #### Parameters
 
@@ -3305,18 +3305,19 @@ The following parameters are available in the `peadm::util::init_db_server` plan
 * [`install_pe`](#-peadm--util--init_db_server--install_pe)
 * [`pe_version`](#-peadm--util--init_db_server--pe_version)
 * [`pe_platform`](#-peadm--util--init_db_server--pe_platform)
+* [`wait_time`](#-peadm--util--init_db_server--wait_time)
 
 ##### <a name="-peadm--util--init_db_server--db_host"></a>`db_host`
 
 Data type: `String[1]`
 
-
+The node to initialise as the PE PostgreSQL host.
 
 ##### <a name="-peadm--util--init_db_server--install_pe"></a>`install_pe`
 
 Data type: `Boolean`
 
-
+Run the PE installer on the database node.
 
 Default value: `false`
 
@@ -3324,7 +3325,7 @@ Default value: `false`
 
 Data type: `String[1]`
 
-
+The PE version to install when install_pe is set.
 
 Default value: `'2023.5.0'`
 
@@ -3332,7 +3333,17 @@ Default value: `'2023.5.0'`
 
 Data type: `String[1]`
 
-
+The installer platform to download when install_pe is set.
 
 Default value: `'el-8-x86_64'`
+
+##### <a name="-peadm--util--init_db_server--wait_time"></a>`wait_time`
+
+Data type: `Integer[1]`
+
+Seconds to wait for the inventory targets to become reachable before
+failing. Defaults to 120, which is Bolt's own default for
+wait_until_available.
+
+Default value: `120`
 

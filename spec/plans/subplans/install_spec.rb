@@ -114,6 +114,120 @@ describe 'peadm::subplans::install' do
     expect(order.index('wait:pe-master')).to be < order.index('code_manager:file-sync commit')
   end
 
+  # P1-17: /tmp/pe.conf carries console_admin_password. It is restricted right
+  # after upload and removed as soon as the last installer run has read it, on
+  # success and on failure, instead of staying on the nodes.
+  describe '/tmp/pe.conf hygiene' do
+    let(:params) do
+      {
+        'primary_host' => 'primary',
+        'console_password' => 'puppetLabs123!',
+        'version' => '2023.8.10',
+      }
+    end
+    let(:split_params) { params.merge('primary_postgresql_host' => 'postgres1') }
+
+    # Records every pe.conf command and installer task, in order, with its targets.
+    def record_events(events)
+      allow_any_command
+      allow_command('chmod 0600 /tmp/pe.conf').return do |targets:, **|
+        events << [:chmod, targets.map(&:name).sort]
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => '', 'stderr' => '', 'exit_code' => 0 }) })
+      end
+      allow_command('rm -f /tmp/pe.conf').return do |targets:, **|
+        events << [:rm, targets.map(&:name).sort]
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => '', 'stderr' => '', 'exit_code' => 0 }) })
+      end
+      ['peadm::pe_install', 'peadm::pe_reinstall'].each do |task|
+        allow_task(task).return do |targets:, **|
+          events << [task.split('::').last.to_sym, targets.map(&:name).sort]
+          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+        end
+      end
+      allow_task('peadm::rbac_token').return do |targets:, **|
+        events << [:rbac_token, targets.map(&:name).sort]
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+      end
+    end
+
+    # Catches a mutation that drops the chmod after the upload.
+    it 'restricts /tmp/pe.conf to 0600 on the primary right after upload' do
+      events = []
+      record_events(events)
+      expect(run_plan('peadm::subplans::install', params)).to be_ok
+      expect(events).to include([:chmod, ['primary']])
+      expect(events.index([:chmod, ['primary']])).to be < events.index([:pe_install, ['primary']])
+    end
+
+    it 'restricts it on the database hosts too' do
+      events = []
+      record_events(events)
+      expect(run_plan('peadm::subplans::install', split_params)).to be_ok
+      expect(events.select { |e| e[0] == :chmod }.flat_map(&:last).sort).to eq(['postgres1', 'primary'])
+    end
+
+    # Catches a mutation that removes the file before the installers have read it,
+    # or never removes it.
+    it 'removes /tmp/pe.conf after the last installer run and before the rbac token step' do
+      events = []
+      record_events(events)
+      expect(run_plan('peadm::subplans::install', params)).to be_ok
+      rm_index = events.index([:rm, ['primary']])
+      expect(rm_index).not_to be_nil, 'rm -f /tmp/pe.conf never ran on the primary'
+      last_install = events.rindex { |e| e[0] == :pe_install }
+      expect(rm_index).to be > last_install
+      expect(rm_index).to be < events.index { |e| e[0] == :rbac_token }
+    end
+
+    it 'removes it after the split-database re-run, not before' do
+      events = []
+      record_events(events)
+      expect(run_plan('peadm::subplans::install', split_params)).to be_ok
+      rm_index = events.index { |e| e[0] == :rm }
+      expect(rm_index).to be > events.rindex { |e| e[0] == :pe_reinstall }
+      expect(events[rm_index].last).to eq(['postgres1', 'primary'])
+    end
+
+    it 'removes it from the database hosts as well when the installer failed on them' do
+      events = []
+      record_events(events)
+      expect_task('peadm::pe_install').with_targets('postgres1').error_with({ 'msg' => 'postgres installer failed', 'kind' => 'puppetlabs.tasks/task-error' })
+      result = run_plan('peadm::subplans::install', split_params)
+      expect(result).not_to be_ok
+      expect(events).to include([:rm, ['postgres1', 'primary']])
+    end
+
+    # Catches a mutation that lets the failing installer leave the file behind
+    # (the file holds the console password) or swallows the installer's error.
+    it 'removes /tmp/pe.conf and fails with the installer error when pe_install fails' do
+      events = []
+      record_events(events)
+      expect_task('peadm::pe_install').with_targets('primary').error_with({ 'msg' => 'installer exploded', 'kind' => 'puppetlabs.tasks/task-error',
+'details' => { '_output' => 'tail of the report' } })
+      result = run_plan('peadm::subplans::install', params)
+      expect(result).not_to be_ok
+      # Bolt's own run-failure error, unchanged: same kind, and the details still
+      # carry the failing result with the installer's message.
+      expect(result.value.kind).to eq('bolt/run-failure')
+      expect(result.value.msg).to include('peadm::pe_install')
+      expect(result.value.details['result_set'].first.error_hash['msg']).to eq('installer exploded')
+      expect(events).to include([:rm, ['primary']])
+      expect(events.map(&:first)).not_to include(:rbac_token)
+    end
+
+    it 'removes /tmp/pe.conf and fails when the split-database re-run fails' do
+      events = []
+      record_events(events)
+      expect_task('peadm::pe_reinstall').error_with({ 'msg' => 'reinstall exploded', 'kind' => 'puppetlabs.tasks/task-error' })
+      result = run_plan('peadm::subplans::install', split_params)
+      expect(result).not_to be_ok
+      expect(result.value.kind).to eq('bolt/run-failure')
+      expect(result.value.msg).to include('peadm::pe_reinstall')
+      expect(result.value.details['result_set'].first.error_hash['msg']).to eq('reinstall exploded')
+      expect(events).to include([:rm, ['postgres1', 'primary']])
+    end
+  end
+
   # P1-16: both pe-master readiness waits (before the file-sync commit, and
   # after the post-install Puppet run) take the operator's deadline.
   describe 'service_ready_timeout' do
