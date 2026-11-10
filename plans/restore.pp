@@ -4,6 +4,13 @@
 # @param restore_type Choose from `recovery`, `recovery-db` and `custom`
 # @param restore A hash of custom backup options, see the peadm::recovery_opts_default() function for the default values
 # @param input_file The file containing the backup to restore from
+# @param console_password Console password for the restored system, needed to fetch an RBAC token when restoring a migration
+# @param node_group_environment
+#   The environment passed to `puppet-backup restore --pe-environment` when it is not production.
+#   Defaults to the environment recorded in the backup (peadm/node_group_environment.json), then
+#   to the one set in the primary's pe.conf, then to production.
+# @param service_ready_timeout
+#   Seconds to wait for the PE services to be ready after the restore, before the plan fails.
 # @example 
 #   bolt plan run peadm::restore -t primary1.example.com input_file=/tmp/peadm-backup.tar.gz
 #
@@ -22,6 +29,12 @@ plan peadm::restore (
 
   # Console password for restored system
   Optional[String] $console_password = undef,
+
+  # Environment to restore into. Defaults to the one recorded in the backup.
+  Optional[Peadm::Pe_environment] $node_group_environment = undef,
+
+  # Seconds to wait for PE services after the restore
+  Integer[1] $service_ready_timeout = 60,
 ) {
   peadm::assert_supported_bolt_version()
 
@@ -72,6 +85,45 @@ plan peadm::restore (
   $primary_target   = peadm::get_targets(getvar('cluster.params.primary_host'), 1)
   $replica_target   = peadm::get_targets(getvar('cluster.params.replica_host'), 1)
   $compiler_targets = peadm::get_targets(getvar('cluster.params.compiler_hosts'))
+
+  # Work out which environment puppet-backup restore targets (PE defaults to
+  # production). Precedence: the node_group_environment parameter, then the
+  # environment peadm::backup recorded in the backup, then the one in the
+  # primary's pe.conf (older backups have no record), then production. The
+  # value ends up on a root command line, so a name read from the backup file
+  # is checked against Peadm::Pe_environment before it is used. (PE-46598)
+  if $node_group_environment =~ NotUndef {
+    $restore_environment = $node_group_environment
+    $restore_environment_source = 'the node_group_environment parameter'
+  } else {
+    $environment_file = "${recovery_directory}/peadm/node_group_environment.json"
+    $environment_content = run_task('peadm::read_file', $targets,
+      { '_catch_errors' => true, 'path' => $environment_file }
+    ).first['content']
+    if $environment_content =~ String[1] {
+      $environment_record = parsejson($environment_content, undef)
+      $backup_environment = $environment_record ? {
+        Hash    => $environment_record['node_group_environment'],
+        default => undef,
+      }
+      assert_type(Peadm::Pe_environment, $backup_environment) |$expected, $_actual| {
+        fail_plan("The backup's ${environment_file} does not hold a valid node_group_environment (lowercase letters, digits and underscores only): ${peadm::sanitize_log_text(String($backup_environment), 100)}") # lint:ignore:140chars
+      }
+      $restore_environment = $backup_environment
+      $restore_environment_source = 'the backup'
+    } else {
+      $restore_environment = peadm::get_node_group_environment($primary_target)
+      $restore_environment_source = 'pe.conf on the primary'
+    }
+  }
+  out::message("# Restoring into the '${restore_environment}' environment (from ${restore_environment_source})")
+
+  # Appended right after `--force` in each puppet-backup restore call. Empty for
+  # production, so production clusters run exactly the commands they always did.
+  $pe_environment_flag = $restore_environment ? {
+    'production' => '',
+    default      => " --pe-environment=${shellquote($restore_environment)}",
+  }
 
   # Determine the array of targets to which the PuppetDB PostgreSQL database
   # should be restored to. This could be as simple as just the primary server,
@@ -152,7 +204,7 @@ plan peadm::restore (
         /opt/puppetlabs/bin/puppet-backup restore \
           --scope=certs,code,config \
           --tempdir=${shellquote($recovery_directory)} \
-          --force \
+          --force${pe_environment_flag} \
           ${shellquote($recovery_directory)}/recovery/pe_backup-*tgz
         | CMD
   # lint:endignore
@@ -213,7 +265,7 @@ plan peadm::restore (
         /opt/puppetlabs/bin/puppet-backup restore \
           --scope=certs \
           --tempdir=${shellquote($recovery_directory)} \
-          --force \
+          --force${pe_environment_flag} \
           ${shellquote($recovery_directory)}/ca/pe_backup-*tgz
         | CMD
     }
@@ -224,7 +276,7 @@ plan peadm::restore (
         /opt/puppetlabs/bin/puppet-backup restore \
           --scope=code \
           --tempdir=${shellquote($recovery_directory)} \
-          --force \
+          --force${pe_environment_flag} \
           ${shellquote($recovery_directory)}/code/pe_backup-*tgz
         | CMD
     }
@@ -235,7 +287,7 @@ plan peadm::restore (
         /opt/puppetlabs/bin/puppet-backup restore \
           --scope=config \
           --tempdir=${shellquote($recovery_directory)} \
-          --force \
+          --force${pe_environment_flag} \
           ${shellquote($recovery_directory)}/config/pe_backup-*tgz
         | CMD
     }
@@ -452,7 +504,7 @@ plan peadm::restore (
   # started"). Without this wait, a caller that proceeds immediately (e.g.
   # peadm::migrate's add_replica/provision_replica call) can hit every PE
   # service reporting "not running".
-  peadm::wait_until_service_ready('all', $primary_target)
+  peadm::wait_until_service_ready('all', $primary_target, $service_ready_timeout)
 
   # The certs-scope restore re-issues this primary's certificate through the
   # filesystem CA (bumping $cadir/serial), but the database-backed CA restored

@@ -155,6 +155,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/plans/subplans/install_spec.rb spec/plans/util/init_db_server_spec.rb` passes. The examples record every command and installer task in order and assert the chmod comes before the installer, the removal comes after the last one (and before the RBAC token step), and a failing `pe_install` removes the file and fails with Bolt's run-failure. On a cluster, after `peadm::install`, `ls /tmp/pe.conf` on the primary reports no such file (the node check in plan 01-13).
 - **Scenario:** I-01. **Status:** spec shows it. Node check pending plan 01-13.
 
+### P1-18 Restore always targeted the production environment
+
+- **Complaint:** PE-46598 (Blocker): backup, restore and migrate need a solution for PE installations whose environment is not production. `puppet-backup restore` defaults to production and takes `--pe-environment` for anything else; `peadm::restore` never passed it, so a cluster classified into another environment was restored as if it were production. Related: PE-39789 and PE-39465 (peadm assumes a production environment).
+- **Fix:** the P1-18 commit (ledger row P1-18). `peadm::backup` records the environment in `peadm/node_group_environment.json`; `peadm::restore` uses the `node_group_environment` parameter, else that record, else the primary's pe.conf, else production, and adds `--pe-environment=<env>` to every `puppet-backup restore` call when it is not production. `peadm::restore` also takes `service_ready_timeout` (default 60). Fixes the backup and restore part of PE-46598.
+- **Reproduce (before):** on the parent of the P1-18 commit, copy in the new `spec/plans/restore_spec.rb` and run `bundle exec rspec spec/plans/restore_spec.rb -e 'adds --pe-environment=dev to the recovery restore'`. The plan has no such parameter and ignores the record; the recovery restore command carries no environment. By hand, restore a backup taken on a cluster whose pe.conf sets both environment keys to `dev`: `puppet-backup restore` runs without `--pe-environment` and restores into production.
+- **Demonstrate (after):** `bundle exec rspec spec/plans/backup_spec.rb spec/plans/restore_spec.rb` passes. The restore examples record every command and show `--force --pe-environment=dev` on the recovery restore and on the ca, code and config restores, no flag for production, and the parameter beating the record. By hand, `bolt plan run peadm::restore -t primary input_file=<backup> node_group_environment=staging` prints `# Restoring into the 'staging' environment (from the node_group_environment parameter)` and the `puppet-backup restore` commands carry `--pe-environment=staging`.
+- **Scenario:** M-02. **Status:** spec shows it, not run on a cluster. Needs B-01 and M-02 on a non-production cluster.
+
 ## Template
 
 ```markdown

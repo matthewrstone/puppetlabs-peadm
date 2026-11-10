@@ -2962,6 +2962,8 @@ The following parameters are available in the `peadm::restore` plan:
 * [`restore`](#-peadm--restore--restore)
 * [`input_file`](#-peadm--restore--input_file)
 * [`console_password`](#-peadm--restore--console_password)
+* [`node_group_environment`](#-peadm--restore--node_group_environment)
+* [`service_ready_timeout`](#-peadm--restore--service_ready_timeout)
 
 ##### <a name="-peadm--restore--targets"></a>`targets`
 
@@ -2995,9 +2997,27 @@ The file containing the backup to restore from
 
 Data type: `Optional[String]`
 
-
+Console password for the restored system, needed to fetch an RBAC token when restoring a migration
 
 Default value: `undef`
+
+##### <a name="-peadm--restore--node_group_environment"></a>`node_group_environment`
+
+Data type: `Optional[Peadm::Pe_environment]`
+
+The environment passed to `puppet-backup restore --pe-environment` when it is not production.
+Defaults to the environment recorded in the backup (peadm/node_group_environment.json), then
+to the one set in the primary's pe.conf, then to production.
+
+Default value: `undef`
+
+##### <a name="-peadm--restore--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds to wait for the PE services to be ready after the restore, before the plan fails.
+
+Default value: `60`
 
 ### <a name="peadm--restore_ca"></a>`peadm::restore_ca`
 

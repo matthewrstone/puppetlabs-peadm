@@ -81,6 +81,11 @@ plan peadm::backup (
     default => {},
   })
 
+  # Record which environment PE classifies its node groups into, so that a
+  # restore of this backup can pass it to `puppet-backup restore
+  # --pe-environment` instead of assuming production. (PE-46598)
+  $node_group_environment = peadm::get_node_group_environment($primary_target)
+
   # Create backup folders
   apply($targets) {
     file { $backup_directory :
@@ -101,6 +106,14 @@ plan peadm::backup (
     # backup the cluster config
     file { "${backup_directory}/peadm/peadm_config.json":
       content => stdlib::to_json_pretty($cluster),
+      owner   => 'root',
+      group   => 'root',
+      mode    => '0600',
+    }
+
+    # backup the PE node group environment, read by peadm::restore
+    file { "${backup_directory}/peadm/node_group_environment.json":
+      content => stdlib::to_json_pretty({ 'node_group_environment' => $node_group_environment }),
       owner   => 'root',
       group   => 'root',
       mode    => '0600',

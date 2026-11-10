@@ -6,6 +6,7 @@ require 'spec_helper'
 
 describe 'peadm::backup' do
   include BoltSpec::Plans
+  let(:primary_pe_conf) { nil }
   let(:default_params) { { 'targets' => 'primary', 'backup_type' => 'recovery' } }
   let(:classifier_only) do
     {
@@ -39,6 +40,12 @@ describe 'peadm::backup' do
     allow(Puppet::Pops::Time::Timestamp).to receive(:now).and_return(mocktime)
 
     allow_apply
+
+    # The primary's pe.conf, read to record the node group environment. An empty
+    # answer means production.
+    allow_task('peadm::read_file').return do |targets:, **|
+      Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'content' => primary_pe_conf }) })
+    end
 
     expect_task('peadm::get_peadm_config').always_return({
                                                            'params' => {
@@ -152,6 +159,44 @@ describe 'peadm::backup' do
       call_log = run_with_ca_backend('filesystem')
       expect(call_log).to include(certs_backup)
       expect(call_log).not_to include(ca_export)
+    end
+  end
+
+  # PE-46598: restore needs to know which environment the cluster was classified
+  # into, so the backup records it. The apply() block is mocked by BoltSpec, so
+  # the file itself is checked on the plan text; what the plan reads is checked
+  # through the stubbed pe.conf.
+  context 'recording the node group environment' do
+    let(:plan_text) { File.read(File.expand_path('../../plans/backup.pp', __dir__)) }
+    let(:dev_pe_conf) do
+      '{"pe_install::install::classification::pe_node_group_environment": "dev", "puppet_enterprise::master::recover_configuration::pe_environment": "dev"}'
+    end
+    let(:primary_pe_conf) { dev_pe_conf }
+
+    it 'reads the environment from pe.conf on the primary' do
+      allow_any_command
+      allow_out_message
+      expect_task('peadm::read_file').with_targets(['primary']).with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').be_called_times(1)
+
+      expect(run_plan('peadm::backup', default_params)).to be_ok
+    end
+
+    it 'fails before backing anything up when the pe.conf environment keys disagree' do
+      pe_conf = '{"pe_install::install::classification::pe_node_group_environment": "dev", "puppet_enterprise::master::recover_configuration::pe_environment": "staging"}'
+      allow_task('peadm::read_file').always_return({ 'content' => pe_conf })
+      expect_command(%r{puppet-backup create}).not_be_called
+
+      result = run_plan('peadm::backup', default_params)
+      expect(result).not_to be_ok
+      expect(result.value.msg).to match(%r{need to be set to the same value})
+    end
+
+    # Catches a mutation that drops the file resource or changes its owner or mode.
+    it 'writes peadm/node_group_environment.json as root with mode 0600, beside peadm_config.json' do
+      region = plan_text[%r{file \{ "\$\{backup_directory\}/peadm/node_group_environment\.json":.*?\n    \}}m]
+      expect(region).not_to be_nil
+      expect(region).to include("stdlib::to_json_pretty({ 'node_group_environment' => $node_group_environment })")
+      expect(region).to include("owner   => 'root'", "group   => 'root'", "mode    => '0600'")
     end
   end
 end
