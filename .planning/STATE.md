@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Foundations, Diagnostics and Test Baseline
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-11-10T22:06:39.553Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-11-10T22:30:45.786Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 01 execution started
-state_head: "0b5614eb3d22e1a4d2b3c9d810e6b72e49898ad6"
+state_head: 89ab22d0c7215163c737cc9fb0804cee6240a0f4
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 14
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-10)
 ## Current Position
 
 Phase: 01 (Foundations, Diagnostics and Test Baseline) — EXECUTING
-Plan: 11 of 14
+Plan: 12 of 14
 Status: Ready to execute
 Last activity: 2026-11-10 — Phase 01 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P08 | 8 min | 1 tasks | 7 files |
 | Phase 01 P09 | 13 min | 2 tasks | 11 files |
 | Phase 01 P10 | 25 min | 3 tasks | 14 files |
+| Phase 01 P11 | 20 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Plan 01-09: node_group_environment is Optional (undef) and resolved in the plan body, so begin_at_step type errors fire before any remote call
 - [Phase 01]: 01-10: PE environment resolved once in peadm::install from pe_conf_data (Peadm::Pe_environment validated) and passed to install and configure subplans
 - [Phase 01]: 01-10: init_db_server stays public (documented operator plan); /tmp/pe.conf removed after installers on success and failure via catch_errors + fail_plan(Error)
+- [Phase 01]: Restore environment precedence: node_group_environment parameter, then the backup's node_group_environment.json, then the primary's pe.conf, then production; --pe-environment added only when not production
+- [Phase 01]: A present but invalid backup environment record fails the restore before any restore call instead of falling through
+- [Phase 01]: peadm::ca_storage_backend replaces the inline bootstrap.cfg grep in backup and restore; unknown (no files) warns and keeps skipping the pe-ca dump/restore
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T22:06:39.268Z
-Stopped at: Completed 01-10-PLAN.md
+Last session: 2026-11-10T22:30:45.479Z
+Stopped at: Completed 01-11-PLAN.md
 Resume file: None
