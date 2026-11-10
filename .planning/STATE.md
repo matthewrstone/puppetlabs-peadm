@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Foundations, Diagnostics and Test Baseline
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-11-10T20:36:08.745Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-11-10T20:49:45.926Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 01 execution started
-state_head: a149fb0e64538c5121f68b07bd41b7f4926ec978
+state_head: d20fd2961f3f46f3008da3713051b828b62cc007
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 14
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-10)
 ## Current Position
 
 Phase: 01 (Foundations, Diagnostics and Test Baseline) — EXECUTING
-Plan: 5 of 14
+Plan: 6 of 14
 Status: Ready to execute
 Last activity: 2026-11-10 — Phase 01 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 4 min | 1 tasks | 14 files |
 | Phase 01 P03 | 25min | 2 tasks | 7 files |
 | Phase 01 P04 | 25 min | 3 tasks | 14 files |
+| Phase 01 P05 | 11 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-03: rspec-puppet-facts stays on 2.x (6.x pulls in openfact); fixtures pinned to tags
 - [Phase 01]: 01-04: Shell-task harness uses real tar with a fake installer in a real tarball and stubs systemctl (user-approved D-10 deviation, ledger P1-04)
 - [Phase 01]: 01-04: files/failure_report.sh is a functions-only sibling of task_helper.sh; whole log is redacted before tail; over-redaction of signed-URL query tails is accepted
+- [Phase 01]: code_manager keeps plain-text output; fails on curl error or non-2xx; failed commit no longer masked by force-sync; PEADM_PE_UNINSTALLER seam added to reinstall_pe
 
 ### Pending Todos
 
@@ -105,6 +107,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T20:36:08.513Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-11-10T20:49:45.709Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None
