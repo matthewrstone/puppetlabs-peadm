@@ -71,6 +71,55 @@ describe 'peadm::add_replica' do
       expect(run_plan('peadm::add_replica', params)).to be_ok
     end
 
+    it 'passes service_ready_timeout to the pe-master wait on the replica before enabling it, with no ca wait' do
+      allow_standard_non_returning_calls
+      expect_task('peadm::code_manager_enabled').always_return(code_manager_enabled)
+      expect_task('peadm::get_peadm_config').always_return(cfg)
+      expect_task('peadm::cert_data').always_return(certdata).be_called_times(4)
+      expect_task('peadm::cert_valid_status').always_return(certstatus)
+      expect_task('package').always_return({ 'status' => 'uninstalled' })
+      expect_plan('peadm::util::copy_file').be_called_times(5)
+
+      order = []
+      # Strict equality on the parameters (bolt-spec with_params): service, port and timeout.
+      # Catches a mutation that drops the deadline and lets the wait fall back to 60 s.
+      expect_task('peadm::wait_until_service_ready')
+        .with_params({ 'service' => 'pe-master', 'port' => '8140', 'timeout' => 300 })
+        .be_called_times(1)
+        .return do |targets:, **_kwargs|
+          order << 'wait'
+          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+        end
+      expect_task('peadm::provision_replica').be_called_times(2).return do |targets:, params:, **_kwargs|
+        order << params['action']
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+      end
+
+      expect_out_verbose.with_params('Current config is...')
+      expect_out_verbose.with_params('Updating classification to...')
+      expect(run_plan('peadm::add_replica', params.merge('service_ready_timeout' => 300))).to be_ok
+      # The wait sits between provisioning and enabling; no wait for the ca service is made
+      # (a second wait call would fail the be_called_times(1) expectation above).
+      expect(order).to eq(['provision', 'wait', 'enable'])
+    end
+
+    it 'defaults the readiness deadline to 60 seconds' do
+      allow_standard_non_returning_calls
+      expect_task('peadm::code_manager_enabled').always_return(code_manager_enabled)
+      expect_task('peadm::get_peadm_config').always_return(cfg)
+      expect_task('peadm::cert_data').always_return(certdata).be_called_times(4)
+      expect_task('peadm::cert_valid_status').always_return(certstatus)
+      expect_task('package').always_return({ 'status' => 'uninstalled' })
+      expect_plan('peadm::util::copy_file').be_called_times(5)
+      expect_task('peadm::wait_until_service_ready')
+        .with_params({ 'service' => 'pe-master', 'port' => '8140', 'timeout' => 60 })
+        .always_return({})
+
+      expect_out_verbose.with_params('Current config is...')
+      expect_out_verbose.with_params('Updating classification to...')
+      expect(run_plan('peadm::add_replica', params)).to be_ok
+    end
+
     it 'fails when code manager not enabled' do
       allow_standard_non_returning_calls
       expect_task('peadm::code_manager_enabled').always_return({ 'code_manager_enabled' => false })

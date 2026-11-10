@@ -107,6 +107,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/code_manager_spec.rb` passes. The stub `curl` answers HTTP 500 with `{"error":"FAKE"}` and the task exits non-zero naming `POST /file-sync/v1/commit` and `HTTP 500`; a planted `"token":"FAKE-SECRET-tok"` never reaches the output.
 - **Scenario:** I-01. **Status:** spec shows it, not run on a cluster. The failing-first run on the unmodified script (8 of 18 examples fail) was done while making the fix.
 
+### P1-08 Readiness waits gave up after a fixed 60 s and printed nothing
+
+- **Complaint:** CASE-029 (cert-loading timeout during a role swap) and the add_replica CI waits documented in `plans/add_replica.pp`. `peadm::wait_until_service_ready` polled 20 times, 3 s apart, with no way to lengthen it, and exited 1 with empty output when the service was still not ready, so a slow node failed on a hard-coded 60 s and the operator saw only "task failed with exit code 1". No Jira ticket filed; related GJira-11 (PE core's own CA query timeouts inside enable) is not fixed here.
+- **Fix:** the P1-08 commit (ledger row P1-08). The task takes `timeout` and `interval`, the function takes `$timeout`, and `peadm::add_replica` takes `service_ready_timeout` (default 60, today's behaviour). On expiry the task names the service and URL awaited, the last curl exit code and HTTP code, the redacted response body, any failed `pe-*` units and the redacted tail of the service log. Fixes the silent exit and the fixed deadline for add_replica. The same parameter for `peadm::upgrade` and `peadm::convert`, including their `wait_until_available` reconnect waits, is ledger row P1-09 (see the P1-09 section below).
+- **Reproduce (before):** on the parent of the P1-08 commit, copy in the new `spec/unit/shell_tasks/wait_until_service_ready_spec.rb` and run it: 11 of its 14 examples fail. By hand with the harness stubs, `curl` answering HTTP 503 makes the old script loop 20 times and exit 1 with empty output.
+- **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/wait_until_service_ready_spec.rb spec/plans/add_replica_spec.rb` passes. With `timeout: 9, interval: 3` and a stub `curl` answering 503, the task makes 3 attempts and prints `Timed out after 9s waiting for pe-master on https://localhost:8140/status/v1/simple/pe-master`, `HTTP 503`, the failed unit and the log tail, with a planted `password=FAKE-SECRET-pw` redacted. The add_replica example passes `service_ready_timeout => 300` and sees `timeout => 300` on the `pe-master` wait before the `enable` call.
+- **Scenario:** none yet. **Status:** spec shows it, not run on a cluster.
+
 ## Template
 
 ```markdown

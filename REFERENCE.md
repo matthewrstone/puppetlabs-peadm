@@ -108,7 +108,7 @@ before they get overwritten by a classification reassertion
 * [`update_pe_master_rules`](#update_pe_master_rules): Updates the PE Master group rules to support 'pe_compiler_legacy' as a pp_auth_role
 * [`validate_rbac_token`](#validate_rbac_token): Check an RBAC token stored in a file is valid
 * [`verify_tarball`](#verify_tarball): Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it
-* [`wait_until_service_ready`](#wait_until_service_ready): Return when the orchestrator service is healthy, or timeout after 15 seconds
+* [`wait_until_service_ready`](#wait_until_service_ready): Return when the named PE service answers healthy on its status API, or fail after the timeout (default 60 seconds) with a report of what was 
 
 ### Plans
 
@@ -1072,7 +1072,7 @@ Type: Puppet Language
 A convenience function to help remember port numbers for services and handle
 running the wait_until_service_ready task
 
-#### `peadm::wait_until_service_ready(String $service, TargetSpec $target)`
+#### `peadm::wait_until_service_ready(String $service, TargetSpec $target, Integer[1] $timeout = 60)`
 
 A convenience function to help remember port numbers for services and handle
 running the wait_until_service_ready task
@@ -1083,13 +1083,19 @@ Returns: `Any`
 
 Data type: `String`
 
-
+The service to wait for: all, ca, pe-master or orchestrator-service
 
 ##### `target`
 
 Data type: `TargetSpec`
 
+The node to check
 
+##### `timeout`
+
+Data type: `Integer[1]`
+
+Seconds to keep waiting before the task fails with a report. Defaults to 60.
 
 ### <a name="peadm--warn_group_rules_overwrite"></a>`peadm::warn_group_rules_overwrite`
 
@@ -1945,7 +1951,7 @@ Path to the Puppet Enterprise tarball
 
 ### <a name="wait_until_service_ready"></a>`wait_until_service_ready`
 
-Return when the orchestrator service is healthy, or timeout after 15 seconds
+Return when the named PE service answers healthy on its status API, or fail after the timeout (default 60 seconds) with a report of what was awaited, the last HTTP result, failed pe-* units and the redacted service log tail
 
 **Supports noop?** false
 
@@ -1962,6 +1968,18 @@ What service to check. For example: all, pe-master, orchestrator-service
 Data type: `Enum['8140', '8143']`
 
 Which port to query the status API on
+
+##### `timeout`
+
+Data type: `Optional[Integer[1]]`
+
+Seconds to keep waiting before failing. Defaults to 60.
+
+##### `interval`
+
+Data type: `Optional[Integer[1]]`
+
+Seconds to sleep between attempts. Defaults to 3.
 
 ## Plans
 
@@ -2150,6 +2168,7 @@ The following parameters are available in the `peadm::add_replica` plan:
 * [`replica_postgresql_host`](#-peadm--add_replica--replica_postgresql_host)
 * [`token_file`](#-peadm--add_replica--token_file)
 * [`node_group_environment`](#-peadm--add_replica--node_group_environment)
+* [`service_ready_timeout`](#-peadm--add_replica--service_ready_timeout)
 
 ##### <a name="-peadm--add_replica--primary_host"></a>`primary_host`
 
@@ -2187,6 +2206,14 @@ Data type: `String[1]`
 environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
 
 Default value: `peadm::get_node_group_environment($primary_host)`
+
+##### <a name="-peadm--add_replica--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait may take before it fails with a report. Default 60.
+
+Default value: `60`
 
 ### <a name="peadm--backup"></a>`peadm::backup`
 
