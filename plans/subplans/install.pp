@@ -28,6 +28,11 @@
 #   Config data to plane into pe.conf when generated on all hosts, this can be
 #   used for tuning data etc.
 #
+# @param node_group_environment
+#   The Puppet environment PE classifies its own node groups into, and the one
+#   this plan stubs and commits to file-sync. Resolved by peadm::install from
+#   the environment keys of pe_conf_data. Defaults to production.
+#
 # @param pe_installer_source
 #   The URL to download the Puppet Enterprise installer media from. If not
 #   specified, PEAdm will attempt to download PE installation media from its
@@ -53,6 +58,7 @@ plan peadm::subplans::install (
   Optional[Stdlib::HTTPSUrl] $pe_installer_source = undef,
   Array[String]        $dns_alt_names       = [],
   Hash                 $pe_conf_data        = {},
+  Peadm::Pe_environment $node_group_environment = 'production',
 
   # Code Manager
   Optional[Boolean]    $code_manager_auto_configure = undef,
@@ -487,13 +493,14 @@ plan peadm::subplans::install (
     fail_plan("Failed to obtain RBAC token after ${rbac_token_max_attempts} attempts: ${rbac_token_error}")
   }
 
-  # Stub a production environment and commit it to file-sync. At least one
-  # commit (content irrelevant) is necessary to be able to configure
-  # replication. A production environment must exist when committed to avoid
+  # Stub the configured environment (production unless pe_conf_data names
+  # another) and commit it to file-sync. At least one commit (content
+  # irrelevant) is necessary to be able to configure replication. The
+  # environment PE classifies into must exist when committed to avoid
   # corrupting the PE console. Create the site.pp file specifically to avoid
   # breaking the `puppet infra configure` command.
   run_task('peadm::mkdir_p_file', $primary_target,
-    path    => '/etc/puppetlabs/code-staging/environments/production/manifests/site.pp',
+    path    => "/etc/puppetlabs/code-staging/environments/${node_group_environment}/manifests/site.pp",
     chown_r => '/etc/puppetlabs/code-staging/environments',
     owner   => 'pe-puppet',
     group   => 'pe-puppet',

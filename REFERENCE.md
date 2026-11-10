@@ -60,6 +60,7 @@ before they get overwritten by a classification reassertion
 * [`Peadm::Download_mode`](#Peadm--Download_mode): download the installer to the bolt node and upload to targets, or let the targets download it directly
 * [`Peadm::Known_hosts`](#Peadm--Known_hosts)
 * [`Peadm::Ldap_config`](#Peadm--Ldap_config)
+* [`Peadm::Pe_environment`](#Peadm--Pe_environment): A Puppet environment name: lowercase letters, digits and underscores
 * [`Peadm::Pe_version`](#Peadm--Pe_version)
 * [`Peadm::Pem`](#Peadm--Pem)
 * [`Peadm::Recovery_opts`](#Peadm--Recovery_opts)
@@ -802,17 +803,19 @@ Type: Puppet Language
 
 check if a custom PE environment is set in pe.conf
 
-#### `peadm::get_node_group_environment(Peadm::SingleTargetSpec $primary)`
+#### `peadm::get_node_group_environment(Variant[Peadm::SingleTargetSpec, Hash] $primary)`
 
 The peadm::get_node_group_environment function.
 
-Returns: `String` the desired environment for PE specific node groups
+Returns: `Peadm::Pe_environment` the desired environment for PE specific node groups
 
 ##### `primary`
 
-Data type: `Peadm::SingleTargetSpec`
+Data type: `Variant[Peadm::SingleTargetSpec, Hash]`
 
-the FQDN for the primary, here we will read the pe.conf from
+Either the FQDN (or Target) of the primary, whose pe.conf is read, or a Hash
+holding pe.conf data directly (for example the `pe_conf_data` given to
+peadm::install, before any pe.conf exists on a node).
 
 ### <a name="peadm--get_pe_conf"></a>`peadm::get_pe_conf`
 
@@ -1193,6 +1196,12 @@ Struct[{
     Optional[user_rdn]                  => Optional[String],
 }]
 ```
+
+### <a name="Peadm--Pe_environment"></a>`Peadm::Pe_environment`
+
+A Puppet environment name: lowercase letters, digits and underscores
+
+Alias of `Pattern[/\A[a-z0-9_]+\z/]`
 
 ### <a name="Peadm--Pe_version"></a>`Peadm::Pe_version`
 

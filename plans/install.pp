@@ -106,6 +106,14 @@ plan peadm::install (
 
   peadm::assert_supported_pe_version($version, $permit_unsafe_versions)
 
+  # Resolve the environment PE will classify its node groups into, once, from
+  # the same two pe.conf keys PE reads. A bad name, or two keys that disagree,
+  # fails here, before anything is installed.
+  $node_group_environment = peadm::get_node_group_environment($pe_conf_data ? {
+      undef   => {},
+      default => $pe_conf_data,
+  })
+
   $install_result = run_plan('peadm::subplans::install',
     # Standard
     primary_host                   => $primary_host,
@@ -125,6 +133,7 @@ plan peadm::install (
     console_password               => $console_password,
     dns_alt_names                  => $dns_alt_names,
     pe_conf_data                   => $pe_conf_data,
+    node_group_environment         => $node_group_environment,
 
     # Code Manager
     code_manager_auto_configure => $code_manager_auto_configure,

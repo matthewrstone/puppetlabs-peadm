@@ -131,6 +131,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/step_names_spec.rb spec/plans/add_database_spec.rb spec/plans/upgrade_spec.rb spec/plans/convert_spec.rb` passes. To see the guard fire, rename one `peadm::plan_step('...')` in `plans/convert.pp` and run `bundle exec rspec spec/unit/step_names_spec.rb`: the convert example fails showing the two lists. By hand, `bolt plan run peadm::add_database begin_at_step=bogus ...` (likewise `peadm::upgrade` and `peadm::convert`) now ends with `parameter 'begin_at_step' expects a match for Peadm::AddDatabaseSteps = Enum[...]` and no task has run.
 - **Scenario:** none yet. **Status:** spec shows it. Not run against a real primary.
 
+### P1-15 peadm::install assumed a production environment
+
+- **Complaint:** PE-39789 and PE-39465 (related PE-46598): peadm assumes a production environment exists. An operator who sets a different environment in `pe_conf_data` (both `pe_install::install::classification::pe_node_group_environment` and `puppet_enterprise::master::recover_configuration::pe_environment`) still got the production `site.pp` stub and file-sync commit from `peadm::install`, so the environment PE classifies into had no committed code.
+- **Fix:** the P1-15 commit (ledger row P1-15). `peadm::install` resolves the environment once from `pe_conf_data` (`peadm::get_node_group_environment` now accepts a pe.conf Hash) and passes it to `peadm::subplans::install`, which stubs `environments/<name>/manifests/site.pp`. The new `Peadm::Pe_environment` type rejects a name that is not lowercase letters, digits and underscores before it reaches the path. Fixes the install-path stub. Classifying the PE node groups into that environment is the P1-16 commit.
+- **Reproduce (before):** on the parent of the P1-15 commit, copy in the new `spec/plans/subplans/install_spec.rb` and run `bundle exec rspec spec/plans/subplans/install_spec.rb -e 'stubs site.pp in the configured environment'`. The stub path says `environments/production` whatever the operator configured (the parameter does not exist there).
+- **Demonstrate (after):** `bundle exec rspec spec/functions/get_node_group_environment_spec.rb spec/plans/subplans/install_spec.rb spec/plans/install_spec.rb` passes. By hand, `bolt plan run peadm::install ... pe_conf_data='{"pe_install::install::classification::pe_node_group_environment":"dev","puppet_enterprise::master::recover_configuration::pe_environment":"dev"}'` stubs `/etc/puppetlabs/code-staging/environments/dev/manifests/site.pp`; the same with `Dev-1` fails at the start naming the name.
+- **Scenario:** I-02. **Status:** spec shows it. Cluster run to be recorded by plan 01-13 if done.
+
 ## Template
 
 ```markdown

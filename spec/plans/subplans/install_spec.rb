@@ -114,6 +114,45 @@ describe 'peadm::subplans::install' do
     expect(order.index('wait:pe-master')).to be < order.index('code_manager:file-sync commit')
   end
 
+  # P1-15: the site.pp stub (and the file-sync commit that follows) must go to
+  # the environment PE was told to use, not always to production.
+  describe 'node_group_environment' do
+    def site_pp_paths_for(extra_params)
+      params = {
+        'primary_host' => 'primary',
+        'console_password' => 'puppetLabs123!',
+        'version' => '2019.8.12',
+      }.merge(extra_params)
+      paths = []
+      allow_task('peadm::mkdir_p_file').return do |targets:, params:, **|
+        paths << params['path']
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+      end
+      expect(run_plan('peadm::subplans::install', params)).to be_ok
+      paths.grep(%r{/code-staging/environments/})
+    end
+
+    # Catches a mutation that hard-codes production in the stub path again.
+    it 'stubs site.pp in the configured environment' do
+      expect(site_pp_paths_for('node_group_environment' => 'dev')).to eq(['/etc/puppetlabs/code-staging/environments/dev/manifests/site.pp'])
+    end
+
+    it 'stubs the production environment when none is given' do
+      expect(site_pp_paths_for({})).to eq(['/etc/puppetlabs/code-staging/environments/production/manifests/site.pp'])
+    end
+
+    # The type is the barrier between operator input and a filesystem path.
+    it 'rejects an environment name that is not a valid Puppet environment name' do
+      params = {
+        'primary_host' => 'primary',
+        'console_password' => 'puppetLabs123!',
+        'version' => '2019.8.12',
+        'node_group_environment' => '../etc',
+      }
+      expect(run_plan('peadm::subplans::install', params)).not_to be_ok
+    end
+  end
+
   it 'installs 2023.4 without r10k_known_hosts' do
     params = {
       'primary_host' => 'primary',

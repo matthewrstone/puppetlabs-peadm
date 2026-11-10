@@ -31,6 +31,56 @@ describe 'peadm::install' do
     end
   end
 
+  describe 'node_group_environment from pe_conf_data (P1-15)' do
+    let(:base_params) { { 'primary_host' => 'primary', 'console_password' => 'puppetLabs123!', 'version' => '2021.7.9' } }
+    let(:env_keys) do
+      ->(pe_install, puppet_enterprise) do
+        {
+          'pe_install::install::classification::pe_node_group_environment' => pe_install,
+          'puppet_enterprise::master::recover_configuration::pe_environment' => puppet_enterprise,
+        }
+      end
+    end
+
+    # bolt-spec's with_params is strict equality, so the params are captured.
+    def run_install_capturing_subplan_params(params)
+      captured = nil
+      allow_out_message
+      allow_plan('peadm::subplans::install').return do |params:, **|
+        captured = params
+        Bolt::PlanResult.new({}, 'success')
+      end
+      allow_plan('peadm::subplans::configure').return { Bolt::PlanResult.new({}, 'success') }
+      result = run_plan('peadm::install', params)
+      [result, captured]
+    end
+
+    # Catches a mutation that forgets to resolve the environment, or resolves it from the wrong place.
+    it 'passes the environment named in pe_conf_data to the install subplan' do
+      result, captured = run_install_capturing_subplan_params(base_params.merge('pe_conf_data' => env_keys.call('dev', 'dev')))
+      expect(result).to be_ok
+      expect(captured['node_group_environment']).to eq('dev')
+    end
+
+    it 'passes production when pe_conf_data names no environment' do
+      result, captured = run_install_capturing_subplan_params(base_params)
+      expect(result).to be_ok
+      expect(captured['node_group_environment']).to eq('production')
+    end
+
+    it 'fails before any subplan runs when the two environment keys disagree' do
+      allow_out_message
+      expect_plan('peadm::subplans::install').not_be_called
+      expect(run_plan('peadm::install', base_params.merge('pe_conf_data' => env_keys.call('dev', 'test')))).not_to be_ok
+    end
+
+    it 'fails before any subplan runs when the environment is not a valid name' do
+      allow_out_message
+      expect_plan('peadm::subplans::install').not_be_called
+      expect(run_plan('peadm::install', base_params.merge('pe_conf_data' => env_keys.call('Dev-1', 'Dev-1')))).not_to be_ok
+    end
+  end
+
   describe 'cloud_database_host plumbing' do
     # bolt-spec's `with_params` compares for strict equality and does not
     # honour rspec matchers like hash_including, so fine-grained param
