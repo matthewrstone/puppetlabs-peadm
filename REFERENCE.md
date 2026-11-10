@@ -1821,6 +1821,18 @@ Data type: `Boolean`
 
 Whether we want to uninstall PE before installing
 
+##### `report_log_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of the installer log to include when the installer fails. Defaults to 40.
+
+##### `report_unit_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of systemctl status to include for each failed pe-* service when the installer fails. Defaults to 15.
+
 ### <a name="restore_classification"></a>`restore_classification`
 
 A short description of this task

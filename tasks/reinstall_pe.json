@@ -1,5 +1,6 @@
 {
   "description": "Reinstall PE, only to be used to restore PE",
+  "files": ["peadm/files/failure_report.sh"],
   "parameters": {
     "version": {
       "type": "String[1]",
@@ -14,6 +15,14 @@
       "type": "Boolean",
       "description": "Whether we want to uninstall PE before installing",
       "default": false
+    },
+    "report_log_lines": {
+      "type": "Optional[Integer[1]]",
+      "description": "How many lines of the installer log to include when the installer fails. Defaults to 40."
+    },
+    "report_unit_lines": {
+      "type": "Optional[Integer[1]]",
+      "description": "How many lines of systemctl status to include for each failed pe-* service when the installer fails. Defaults to 15."
     }
   }
 }
