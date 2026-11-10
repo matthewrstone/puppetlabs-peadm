@@ -84,12 +84,13 @@ plan peadm::upgrade (
     'replica_postgresql_host' => $replica_postgresql_host,
     'node_group_environment' => $resolved_node_group_environment,
     'version' => $version,
-    # Log only the tarball basename, not the full URL: pe_installer_source may
+    # Log only the tarball name, not the full URL: pe_installer_source may
     # carry credentials or signed tokens (e.g. S3 pre-signed URLs) that
-    # shouldn't land in Bolt output or centralized logs.
+    # shouldn't land in Bolt output or centralized logs. The name is taken
+    # without the query string, which is where the signature lives.
     'pe_installer_source' => $pe_installer_source ? {
       undef   => undef,
-      default => $pe_installer_source.split('/')[-1],
+      default => peadm::installer_tarball_name($pe_installer_source),
     },
   })
 
@@ -151,7 +152,7 @@ plan peadm::upgrade (
   $platform = run_task('peadm::precheck', $primary_target).first['platform']
 
   if $pe_installer_source {
-    $pe_tarball_name   = $pe_installer_source.split('/')[-1]
+    $pe_tarball_name   = peadm::installer_tarball_name($pe_installer_source)
     $pe_tarball_source = $pe_installer_source
     $_version          = $pe_tarball_name.split('-')[2]
   } else {

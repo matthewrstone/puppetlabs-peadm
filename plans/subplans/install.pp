@@ -269,7 +269,7 @@ plan peadm::subplans::install (
   }
 
   if $pe_installer_source {
-    $pe_tarball_name = $pe_installer_source.split('/')[-1]
+    $pe_tarball_name = peadm::installer_tarball_name($pe_installer_source)
     $pe_tarball_source = $pe_installer_source
   } else {
     $pe_tarball_name   = "puppet-enterprise-${version}-${platform}.tar.gz"

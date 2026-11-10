@@ -187,6 +187,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/task/rbac_token_spec.rb` passes. The examples run the task against a real temp directory and check `File.stat` modes: directory 0700, file 0600 even with umask 000, a pre-existing 0644 file becomes 0600 holding only the new token. By hand on a primary, `stat -c '%a %U' /root/.puppetlabs/token` prints `600 root`.
 - **Scenario:** none (covered by the spec; any install scenario shows it on a node). **Status:** spec shows it, not run on a cluster.
 
+### P1-23 A pre-signed installer URL leaked its signature into the upgrade log
+
+- **Complaint:** none filed (found in code review, CONCERNS.md; FND-05 asks for proof that plan output carries no secrets). `peadm::upgrade` logged `pe_installer_source.split('/')[-1]` as the "basename" of the installer URL, which for an S3 pre-signed URL is the file name plus `?X-Amz-Credential=...&X-Amz-Signature=...`. The same split fed the staging and upload paths in `peadm::upgrade` and `peadm::subplans::install`, and the installer directory name derived from it.
+- **Fix:** the P1-23 commit (ledger row P1-23). New function `peadm::installer_tarball_name` cuts the URL at `?` and `#` before taking the last path segment; the three derivation sites use it. The download still uses the full URL. Fixes the leak into logs, paths and the directory name. A new spec plants fake secrets and shows none reaches plan output from `peadm::install`, `peadm::subplans::install` or `peadm::upgrade`.
+- **Reproduce (before):** on the parent of the P1-23 commit, copy in the new `spec/plans/plan_output_secrets_spec.rb` and run `bundle exec rspec spec/plans/plan_output_secrets_spec.rb -e 'peadm::upgrade'`. The first upgrade example fails with the signature in the `Parameter 'pe_installer_source': [puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz?X-Amz-Credential=FAKE-SECRET-cred&X-Amz-Signature=FAKE-SECRET-sig]` message. By hand, `bolt plan run peadm::upgrade primary_host=<primary> pe_installer_source='https://host/puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz?X-Amz-Signature=abc'` prints that line, signature included.
+- **Demonstrate (after):** `bundle exec rspec spec/functions/installer_tarball_name_spec.rb spec/plans/plan_output_secrets_spec.rb spec/plans/upgrade_spec.rb spec/plans/subplans/install_spec.rb spec/plans/install_spec.rb` passes. The upgrade log line reads `Parameter 'pe_installer_source': [puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz]`, the upload path is `/tmp/puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz`, and the download source is still the full signed URL. By hand, the `bolt plan run` above now prints only the file name.
+- **Scenario:** U-01. **Status:** spec shows it, not run on a cluster.
+
 ## Template
 
 ```markdown

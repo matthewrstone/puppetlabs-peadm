@@ -37,6 +37,7 @@ primary_host vs replica_host) the node was passed as.
 * [`peadm::get_node_group_environment`](#peadm--get_node_group_environment): check if a custom PE environment is set in pe.conf
 * [`peadm::get_pe_conf`](#peadm--get_pe_conf)
 * [`peadm::get_targets`](#peadm--get_targets): Accept undef or a SingleTargetSpec, and return an Array[Target, 1, 0]. This differs from get_target() in that:   - It returns an Array[Target
+* [`peadm::installer_tarball_name`](#peadm--installer_tarball_name): Returns the installer file name from a URL, without query string or fragment
 * [`peadm::log_plan_parameters`](#peadm--log_plan_parameters)
 * [`peadm::migration_opts_default`](#peadm--migration_opts_default)
 * [`peadm::module_version`](#peadm--module_version)
@@ -151,7 +152,7 @@ Supported use cases:
 * `peadm::subplans::prepare_agent`
 * `peadm::uninstall`: Single-entry-point plan for uninstalling Puppet Enterprise
 * `peadm::util::code_sync_status`
-* `peadm::util::copy_file`
+* `peadm::util::copy_file`: Copy one file's content from a source host to the target hosts
 * `peadm::util::db_disable_pglogical`
 * `peadm::util::db_purge`
 * `peadm::util::insert_csr_extension_requests`
@@ -865,6 +866,64 @@ Data type: `Variant[TargetSpec, Undef]`
 Data type: `Optional[Integer[1,1]]`
 
 
+
+### <a name="peadm--installer_tarball_name"></a>`peadm::installer_tarball_name`
+
+Type: Puppet Language
+
+The file name of a PE installer URL is its last path segment. A pre-signed
+URL (for example an S3 one) carries a query string with the signature after
+it, and that must never become part of a log line, an upload path or a
+directory name. The full URL is still the download source; only the name
+derived from it is cleaned.
+
+#### Examples
+
+##### A pre-signed URL
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz?X-Amz-Signature=abc')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz'
+```
+
+##### A URL with a fragment
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar#frag')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar'
+```
+
+#### `peadm::installer_tarball_name(String[1] $url)`
+
+The file name of a PE installer URL is its last path segment. A pre-signed
+URL (for example an S3 one) carries a query string with the signature after
+it, and that must never become part of a log line, an upload path or a
+directory name. The full URL is still the download source; only the name
+derived from it is cleaned.
+
+Returns: `String` The last path segment of the URL, with `?query` and `#fragment` removed
+
+##### Examples
+
+###### A pre-signed URL
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz?X-Amz-Signature=abc')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz'
+```
+
+###### A URL with a fragment
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar#frag')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar'
+```
+
+##### `url`
+
+Data type: `String[1]`
+
+The installer URL, with or without a query string or fragment
 
 ### <a name="peadm--log_plan_parameters"></a>`peadm::log_plan_parameters`
 
