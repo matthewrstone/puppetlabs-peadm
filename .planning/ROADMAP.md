@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. One shared certificate, CRL and key check accepts PEM and DER, RSA and EC and chains, and rejects expired certificates and empty subjects with a clear message; secret-file copies, `/tmp/pe.conf` and token files are written with restrictive modes; readiness waits, including the CA timeout, accept an overridable deadline
   4. Maintainer can run `rake spec` on current test gems with fixtures pinned to tags, test shell tasks through a stub-PATH harness without a real installer, and see a Puppet 9 CI lane and a credentialed Bolt 5 lane report whether peadm runs unchanged; PE 2026.0 and Puppet 9 fixes (`bootstrap.cfg`, and `PKey.read` limited to `tasks/code_sync_status.rb` per D-07 with the other RSA-only sites recorded as follow-ups) are in, the `metadata.json` Puppet range widening is a recorded deferred follow-up (user decision), and the default PE version in `plans/install.pp` is derived from `data/pe_versions.yaml`
   5. An acceptance run on a real cluster completes install, an n to n+1 upgrade, and an injected failure followed by resume; Jira tickets exist for P0-1 to P0-3; every change has a ledger entry and every fix a fix-log entry
-**Plans**: 11/14 plans executed
+**Plans**: 12/14 plans executed
 
 Plans:
 - [x] 01-01-PLAN.md — Ruby 3.3 floor, part 1: .ruby-version, CLAUDE.md, spec.yml and 9 acceptance workflows; Phase 1 ledger section
@@ -46,7 +46,7 @@ Plans:
 - [x] 01-09-PLAN.md — begin_at_step validated before any remote call; step-name drift spec; Peadm::AddDatabaseSteps
 - [x] 01-10-PLAN.md — Install path: non-production environment, readiness deadline through install, /tmp/pe.conf 0600 and removed
 - [x] 01-11-PLAN.md — Backup/restore/restore_ca/migrate in non-production environments; restore and migrate deadline; shared CA backend detection
-- [ ] 01-12-PLAN.md — Secret file copies 0600 (gated by the replica read check in 01-13), token file 0600, planted-secret plan-output spec and signed-URL fix
+- [x] 01-12-PLAN.md — Secret file copies 0600 (gated by the replica read check in 01-13), token file 0600, planted-secret plan-output spec and signed-URL fix
 - [ ] 01-13-PLAN.md — Acceptance slice (U-13), node checks and a replica read check (one added replica), real-cluster and CI runs, Jira P0-1..P0-3, results recorded
 - [ ] 01-14-PLAN.md — Contingency changes from the cluster results (the add_replica `ca` wait if its endpoint is confirmed; a user decision on the secrets/ mode if the replica read check failed); commit hashes by Ledger-ID trailer and traceability audit
 
@@ -105,7 +105,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5. Phase 4 does not nee
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations, Diagnostics and Test Baseline | 11/14 | In Progress | - |
+| 1. Foundations, Diagnostics and Test Baseline | 12/14 | In Progress | - |
 | 2. Safe Upgrade | 0/TBD | Not started | - |
 | 3. Recovery Point and Rollback | 0/TBD | Not started | - |
 | 4. Failover and Node Operations | 0/TBD | Not started | - |

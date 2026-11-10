@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Foundations, Diagnostics and Test Baseline
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-11-10T22:30:45.786Z"
+stopped_at: Completed 01-12-PLAN.md
+last_updated: "2026-11-10T22:50:18.767Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 01 execution started
-state_head: 89ab22d0c7215163c737cc9fb0804cee6240a0f4
+state_head: 12cef4dd09b3286daf81c21e09d559d3d386716f
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-10)
 ## Current Position
 
 Phase: 01 (Foundations, Diagnostics and Test Baseline) — EXECUTING
-Plan: 12 of 14
+Plan: 13 of 14
 Status: Ready to execute
 Last activity: 2026-11-10 — Phase 01 execution started
 
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P09 | 13 min | 2 tasks | 11 files |
 | Phase 01 P10 | 25 min | 3 tasks | 14 files |
 | Phase 01 P11 | 20 min | 3 tasks | 14 files |
+| Phase 01 P12 | 20 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Restore environment precedence: node_group_environment parameter, then the backup's node_group_environment.json, then the primary's pe.conf, then production; --pe-environment added only when not production
 - [Phase 01]: A present but invalid backup environment record fails the restore before any restore call instead of falling through
 - [Phase 01]: peadm::ca_storage_backend replaces the inline bootstrap.cfg grep in backup and restore; unknown (no files) warns and keeps skipping the pe-ca dump/restore
+- [Phase 01]: copy_file defaults secrets/ paths to mode 0600 (else 0644); gated by the replica read check in plan 01-13
+- [Phase 01]: Installer file names are derived from a URL only via peadm::installer_tarball_name; the download source stays the full signed URL
 
 ### Pending Todos
 
@@ -125,6 +128,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T22:30:45.479Z
-Stopped at: Completed 01-11-PLAN.md
+Last session: 2026-11-10T22:50:18.532Z
+Stopped at: Completed 01-12-PLAN.md
 Resume file: None

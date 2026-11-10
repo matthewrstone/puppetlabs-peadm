@@ -13,8 +13,8 @@ Requirements for this release. Each maps to a roadmap phase. Evidence for each i
 - [x] **FND-02**: Operator can run peadm plans against non-`production` PE environments for install, backup, restore and migrate (clears PE-39789, PE-46598)
 - [ ] **FND-03**: Operator gets one shared certificate, CRL and key validation (PEM and DER, RSA and EC, chains, expiry, empty subject) used by peadm tasks and by the CD4PE/SCM plans
 - [x] **FND-04**: Operator is told immediately when `begin_at_step` is not a valid step name for the plan, instead of every step being skipped
-- [ ] **FND-05**: Operator's secrets never appear in plan output or diagnostics, checked by a spec that plants fake secrets
-- [ ] **FND-06**: Maintainer has secret-file copies and temporary PE config written with restrictive permissions, replacing today's world-readable defects: `copy_file` writing every file 0644, `/tmp/pe.conf` left behind, and the RBAC token file following the umask
+- [x] **FND-05**: Operator's secrets never appear in plan output or diagnostics, checked by a spec that plants fake secrets
+- [x] **FND-06**: Maintainer has secret-file copies and temporary PE config written with restrictive permissions, replacing today's world-readable defects: `copy_file` writing every file 0644, `/tmp/pe.conf` left behind, and the RBAC token file following the umask
 - [ ] **FND-07**: Maintainer has readiness waits with overridable deadlines instead of fixed timeouts, including the CA timeout
 
 ### Safe Upgrade
@@ -114,8 +114,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FND-02 | Phase 1 | Complete |
 | FND-03 | Phase 1 | Pending |
 | FND-04 | Phase 1 | Complete |
-| FND-05 | Phase 1 | Pending |
-| FND-06 | Phase 1 | Pending |
+| FND-05 | Phase 1 | Complete |
+| FND-06 | Phase 1 | Complete |
 | FND-07 | Phase 1 | Pending |
 | TST-01 | Phase 1 | Complete |
 | TST-02 | Phase 1 | Complete |
