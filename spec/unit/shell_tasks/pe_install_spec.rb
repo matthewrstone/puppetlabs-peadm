@@ -27,6 +27,7 @@ describe 'tasks/pe_install.sh' do
     File.write(installer, <<~BASH)
       #!/bin/bash
       mkdir -p "$PE_INSTALLER_LOG_DIR"
+      [ -f "$PE_SYSTEMD_DROPIN_DIR/10-shortcircuit.conf" ] && touch "$PE_INSTALLER_LOG_DIR/dropin-present"
       cat > "$PE_INSTALLER_LOG_DIR/20260101.install.log" <<'LOG'
       #{planted_log_lines.join("\n")}
       LOG
@@ -93,6 +94,84 @@ describe 'tasks/pe_install.sh' do
     # which would hide which setting was involved.
     it 'keeps the non-secret part of a redacted line' do
       expect(result[:json]['_output']).to include('console_admin_password: [REDACTED]')
+    end
+  end
+
+  context 'when the report size is overridden' do
+    let(:result) do
+      stub_failed_unit
+      run_task({ report_log_lines: 7, report_unit_lines: 3 }, { 'FAKE_INSTALLER_EXIT' => '6' })
+    end
+
+    # Catches a mutation that stops mapping report_log_lines onto the helper.
+    it 'limits the log tail to report_log_lines' do
+      expect(result[:json]['_output']).to include('--- Last 7 lines of')
+    end
+
+    # Catches a mutation that stops mapping report_unit_lines onto the helper.
+    it 'asks systemctl for report_unit_lines lines per failed unit' do
+      result
+      expect(harness.calls('systemctl')).to include(%r{status pe-puppetdb\.service --no-pager -l -n 3$})
+    end
+
+    # Catches a mutation that changes the documented defaults of 40 and 15.
+    it 'uses 40 log lines and 15 unit lines by default' do
+      stub_failed_unit
+      default_result = run_task({}, { 'FAKE_INSTALLER_EXIT' => '6' })
+      expect(default_result[:json]['_output']).to include('--- Last 40 lines of')
+      expect(harness.calls('systemctl')).to include(%r{-n 15$})
+    end
+  end
+
+  context 'with install_extra_large' do
+    let(:dropin_dir) { File.join(harness.root, 'dropin') }
+    let(:marker) { File.join(log_dir, 'dropin-present') }
+
+    def stub_services(inactive: nil)
+      harness.stub('systemctl', <<~BASH)
+        case "$1" in
+          is-active) [ "$3" = "#{inactive}.service" ] && exit 3; exit 0 ;;
+          list-units) echo "pe-puppetdb.service loaded failed failed PE PuppetDB" ;;
+          status) echo "status block for $2" ;;
+        esac
+      BASH
+    end
+
+    def run_extra_large(env = {})
+      run_task({ install_extra_large: true }, { 'PE_SYSTEMD_DROPIN_DIR' => dropin_dir }.merge(env))
+    end
+
+    # Catches a mutation that treats the known XL installer exit 1 as a failure
+    # even when the core services are up.
+    it 'exits 0 when the installer exits 1 but all three services are active' do
+      stub_services
+      result = run_extra_large('FAKE_INSTALLER_EXIT' => '1')
+      expect(result[:status]).to eq(0)
+      expect(result[:stdout]).not_to include('failed with exit code')
+    end
+
+    # Catches a mutation that skips the PuppetDB short-circuit or leaves it
+    # behind, which would break PuppetDB start after the install.
+    it 'writes the drop-in for the installer run and removes it afterwards' do
+      stub_services
+      run_extra_large('FAKE_INSTALLER_EXIT' => '1')
+      expect(File.exist?(marker)).to be(true)
+      expect(File.exist?(File.join(dropin_dir, '10-shortcircuit.conf'))).to be(false)
+    end
+
+    # Catches a mutation that skips the daemon-reload around the drop-in.
+    it 'reloads systemd after writing and after removing the drop-in' do
+      stub_services
+      run_extra_large('FAKE_INSTALLER_EXIT' => '1')
+      expect(harness.calls('systemctl').grep(%r{daemon-reload}).length).to eq(2)
+    end
+
+    # Catches a mutation that accepts a missing core service as success.
+    it 'prints the report and exits with the installer code when a service is inactive' do
+      stub_services(inactive: 'pe-orchestration-services')
+      result = run_extra_large('FAKE_INSTALLER_EXIT' => '1')
+      expect(result[:status]).to eq(1)
+      expect(result[:json]['_output']).to include('=== Puppet Enterprise installer failed with exit code 1 ===')
     end
   end
 

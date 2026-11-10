@@ -2,6 +2,15 @@
 source "$(dirname $0)/../../peadm/files/task_helper.sh"
 source "$(dirname $0)/../../peadm/files/failure_report.sh"
 
+# The report size can be set with the report_log_lines and report_unit_lines
+# task parameters (or by exporting the PEADM_REPORT_* variables directly).
+[ -n "$PT_report_log_lines" ] && export PEADM_REPORT_LOG_LINES="$PT_report_log_lines"
+[ -n "$PT_report_unit_lines" ] && export PEADM_REPORT_UNIT_LINES="$PT_report_unit_lines"
+
+# Systemd drop-in directory for the extra-large short-circuit; overridable so
+# the extra-large branch can be exercised in a spec.
+dropin_dir="${PE_SYSTEMD_DROPIN_DIR:-/etc/systemd/system/pe-puppetdb.service.d}"
+
 # Try and ensure locale is correctly configured
 [ -z "${LANG}" ] && export LANG=$(localectl status | sed -n 's/.* LANG=\(.*\)/\1/p')
 
@@ -10,8 +19,8 @@ source "$(dirname $0)/../../peadm/files/failure_report.sh"
 # configured, and we don't want to let PuppetDB wait five minutes before
 # giving up on it.
 if [ "$PT_install_extra_large" = "true" ]; then
-	mkdir /etc/systemd/system/pe-puppetdb.service.d
-	cat > /etc/systemd/system/pe-puppetdb.service.d/10-shortcircuit.conf <<-EOF
+	mkdir -p "$dropin_dir"
+	cat > "$dropin_dir/10-shortcircuit.conf" <<-EOF
 		[Service]
 		TimeoutStartSec=1
 		TimeoutStopSec=1
@@ -66,7 +75,7 @@ exit_code=$?
 
 if [ "$PT_install_extra_large" = "true" ]; then
 	systemctl stop pe-puppetdb.service
-	rm /etc/systemd/system/pe-puppetdb.service.d/10-shortcircuit.conf
+	rm "$dropin_dir/10-shortcircuit.conf"
 	systemctl daemon-reload
 fi
 

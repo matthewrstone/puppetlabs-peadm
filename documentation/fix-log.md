@@ -62,8 +62,8 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Complaint:** PE-42686 (related: PE-43373), CASE-049. The extraction step failed partway, after Puppet and PE services were already stopped.
 - **Fix:** `d1fc01c`. New private task `peadm::verify_tarball` runs in `preparation` before anything is stopped. It checks the file exists, is not empty, passes `gzip -t`, lists fully with `tar -tf`, and contains `puppet-enterprise-installer`.
 - **Reproduce (before):** stage a truncated installer, for example `head -c 1000000 puppet-enterprise-*.tar.gz > bad.tar.gz`, and run the upgrade on `d1fc01c^`. Services stop, then extraction fails.
-- **Demonstrate (after):** run the task by hand against good, truncated, empty, wrong-layout and missing archives: `PT_path=bad.tar.gz sh tasks/verify_tarball.sh`. The plan-level check is `bundle exec rspec spec/plans/upgrade_spec.rb -e 'tarball'`.
-- **Scenario:** U-03. **Status:** the script was run by hand against those five archives and the plan ordering is in the spec. Not run in an acceptance upgrade.
+- **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/verify_tarball_spec.rb` runs the task against good, truncated, empty, wrong-layout and missing archives. The plan-level check is `bundle exec rspec spec/plans/upgrade_spec.rb -e 'tarball'`.
+- **Scenario:** U-03. **Status:** spec shows it (the hand-run archive checks became `spec/unit/shell_tasks/verify_tarball_spec.rb` in P1-04). Not run in an acceptance upgrade.
 
 ### P0-5 Legacy compiler OID check blocks upgrades for nodes that are not legacy
 
@@ -77,9 +77,9 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 
 - **Complaint:** CASE-002, CASE-011. `pe-puppetdb` reload failures during upgrade appeared in Bolt as `returned: 6` and a pointer to a log on the node.
 - **Fix:** `547e469` (mitigates GJira-1). `pe_install` prints the last 40 lines of the newest installer log and the status of failed `pe-*` units. It does not fix the reload failure.
-- **Reproduce (before):** make the installer fail and look at the Bolt output on `547e469^`: exit code and log path only.
-- **Demonstrate (after):** run `tasks/pe_install.sh` with a fake installer log directory and a stub `systemctl` that reports a failed unit. The output ends with the log tail and the unit status.
-- **Scenario:** U-01. **Status:** run by hand with the fake directory and stub. No spec, since the task needs a real installer.
+- **Reproduce (before):** make the installer fail and look at the Bolt output on `547e469^`: exit code and log path only. Or run `bundle exec rspec spec/unit/shell_tasks/pe_install_spec.rb` on `547e469^` with the spec and harness copied in: the report examples fail.
+- **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/pe_install_spec.rb` builds a tarball with a fake installer that writes a log and exits 6, stubs `systemctl` to report a failed unit, and asserts the output carries the log tail and the unit status.
+- **Scenario:** U-01. **Status:** spec shows it (the hand run became `spec/unit/shell_tasks/pe_install_spec.rb` in P1-04). The report format has since been redacted, see P1-05.
 
 ### P0-7 Unsupported-version error does not say what to do
 
