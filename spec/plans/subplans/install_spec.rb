@@ -114,6 +114,34 @@ describe 'peadm::subplans::install' do
     expect(order.index('wait:pe-master')).to be < order.index('code_manager:file-sync commit')
   end
 
+  # P1-16: both pe-master readiness waits (before the file-sync commit, and
+  # after the post-install Puppet run) take the operator's deadline.
+  describe 'service_ready_timeout' do
+    def pe_master_wait_timeouts(extra_params)
+      params = {
+        'primary_host' => 'primary',
+        'console_password' => 'puppetLabs123!',
+        'version' => '2019.8.12',
+      }.merge(extra_params)
+      timeouts = []
+      allow_task('peadm::wait_until_service_ready').return do |targets:, params:, **|
+        timeouts << params['timeout']
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+      end
+      expect(run_plan('peadm::subplans::install', params)).to be_ok
+      timeouts
+    end
+
+    # Catches a mutation that leaves either wait on the 60 s default.
+    it 'passes the deadline to both readiness waits' do
+      expect(pe_master_wait_timeouts('service_ready_timeout' => 240)).to eq([240, 240])
+    end
+
+    it 'uses 60 seconds when none is given' do
+      expect(pe_master_wait_timeouts({})).to eq([60, 60])
+    end
+  end
+
   # P1-15: the site.pp stub (and the file-sync commit that follows) must go to
   # the environment PE was told to use, not always to production.
   describe 'node_group_environment' do

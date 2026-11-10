@@ -81,6 +81,56 @@ describe 'peadm::install' do
     end
   end
 
+  describe 'forwarding to both subplans (P1-16)' do
+    let(:base_params) { { 'primary_host' => 'primary', 'console_password' => 'puppetLabs123!', 'version' => '2021.7.9' } }
+    let(:pe_conf_data) do
+      {
+        'pe_install::install::classification::pe_node_group_environment' => 'dev',
+        'puppet_enterprise::master::recover_configuration::pe_environment' => 'dev',
+      }
+    end
+
+    # bolt-spec's with_params is strict equality, so the params are captured.
+    def run_install_capturing_both_subplans(params)
+      captured = {}
+      allow_out_message
+      allow_plan('peadm::subplans::install').return do |params:, **|
+        captured[:install] = params
+        Bolt::PlanResult.new({}, 'success')
+      end
+      allow_plan('peadm::subplans::configure').return do |params:, **|
+        captured[:configure] = params
+        Bolt::PlanResult.new({}, 'success')
+      end
+      expect(run_plan('peadm::install', params)).to be_ok
+      captured
+    end
+
+    # Catches a mutation that forwards the environment to only one subplan.
+    it 'passes the environment to the configure subplan as well as the install subplan' do
+      captured = run_install_capturing_both_subplans(base_params.merge('pe_conf_data' => pe_conf_data))
+      expect(captured[:install]['node_group_environment']).to eq('dev')
+      expect(captured[:configure]['node_group_environment']).to eq('dev')
+    end
+
+    it 'passes service_ready_timeout to both subplans' do
+      captured = run_install_capturing_both_subplans(base_params.merge('service_ready_timeout' => 300))
+      expect(captured[:install]['service_ready_timeout']).to eq(300)
+      expect(captured[:configure]['service_ready_timeout']).to eq(300)
+    end
+
+    it 'passes 60 to both subplans when service_ready_timeout is omitted' do
+      captured = run_install_capturing_both_subplans(base_params)
+      expect(captured[:install]['service_ready_timeout']).to eq(60)
+      expect(captured[:configure]['service_ready_timeout']).to eq(60)
+    end
+
+    it 'rejects a service_ready_timeout of 0' do
+      allow_out_message
+      expect(run_plan('peadm::install', base_params.merge('service_ready_timeout' => 0))).not_to be_ok
+    end
+  end
+
   describe 'cloud_database_host plumbing' do
     # bolt-spec's `with_params` compares for strict equality and does not
     # honour rspec matchers like hash_including, so fine-grained param

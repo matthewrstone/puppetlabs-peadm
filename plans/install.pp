@@ -43,6 +43,10 @@
 #   that compilers can reach PuppetDB's external database. Leave unset for
 #   the default on-prem topology where Postgres runs on the primary or on a
 #   managed external Postgres target.
+# @param service_ready_timeout
+#   Seconds each service readiness wait during the install and configure steps
+#   may take before it fails with a report. Raise it for slow nodes. Defaults
+#   to 60.
 #
 plan peadm::install (
   # Standard
@@ -90,6 +94,7 @@ plan peadm::install (
   Peadm::Download_mode       $download_mode          = 'bolthost',
   Boolean                    $permit_unsafe_versions = false,
   String                     $token_lifetime         = '1y',
+  Integer[1]                 $service_ready_timeout  = 60,
 ) {
   # Log parameters for debugging 
   peadm::log_plan_parameters({
@@ -152,6 +157,7 @@ plan peadm::install (
     download_mode                  => $download_mode,
     permit_unsafe_versions         => $permit_unsafe_versions,
     token_lifetime                 => $token_lifetime,
+    service_ready_timeout          => $service_ready_timeout,
   )
 
   $configure_result = run_plan('peadm::subplans::configure',
@@ -180,6 +186,8 @@ plan peadm::install (
     # Other
     stagingdir                       => $stagingdir,
     final_agent_state                => $final_agent_state,
+    node_group_environment           => $node_group_environment,
+    service_ready_timeout            => $service_ready_timeout,
   )
 
   # Return a string banner reporting on what was done

@@ -2487,6 +2487,7 @@ The following parameters are available in the `peadm::install` plan:
 * [`stagingdir`](#-peadm--install--stagingdir)
 * [`uploaddir`](#-peadm--install--uploaddir)
 * [`cloud_database_host`](#-peadm--install--cloud_database_host)
+* [`service_ready_timeout`](#-peadm--install--service_ready_timeout)
 * [`primary_host`](#-peadm--install--primary_host)
 * [`replica_host`](#-peadm--install--replica_host)
 * [`compiler_hosts`](#-peadm--install--compiler_hosts)
@@ -2610,6 +2611,16 @@ the default on-prem topology where Postgres runs on the primary or on a
 managed external Postgres target.
 
 Default value: `undef`
+
+##### <a name="-peadm--install--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait during the install and configure steps
+may take before it fails with a report. Raise it for slow nodes. Defaults
+to 60.
+
+Default value: `60`
 
 ##### <a name="-peadm--install--primary_host"></a>`primary_host`
 

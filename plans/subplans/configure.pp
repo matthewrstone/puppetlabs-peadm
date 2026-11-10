@@ -24,6 +24,13 @@
 #   at the given host. Propagated to peadm::setup::node_manager so the
 #   classifier groups it manages do not pin the primary's certname as the
 #   puppetdb database host. Leave unset for the default on-prem topology.
+# @param node_group_environment
+#   The Puppet environment the PE node groups managed by
+#   peadm::setup::node_manager are classified into. Resolved by peadm::install
+#   from pe_conf_data. Defaults to production.
+# @param service_ready_timeout
+#   Seconds the readiness wait before replica provisioning may take before it
+#   fails with a report. Defaults to 60.
 #
 plan peadm::subplans::configure (
   # Standard
@@ -51,7 +58,9 @@ plan peadm::subplans::configure (
 
   # Other
   String           $stagingdir                   = '/tmp',
-  Enum['running', 'stopped'] $final_agent_state  = 'running'
+  Enum['running', 'stopped'] $final_agent_state  = 'running',
+  Peadm::Pe_environment $node_group_environment  = 'production',
+  Integer[1]       $service_ready_timeout        = 60
 ) {
   # TODO: get and validate PE version
 
@@ -115,6 +124,7 @@ plan peadm::subplans::configure (
       internal_compiler_a_pool_address => $internal_compiler_a_pool_address,
       internal_compiler_b_pool_address => $internal_compiler_b_pool_address,
       cloud_database_host              => $cloud_database_host,
+      node_group_environment           => $node_group_environment,
       require                          => Class['peadm::setup::node_manager_yaml'],
     }
   }
@@ -123,7 +133,7 @@ plan peadm::subplans::configure (
     # Pre-flight: wait for PuppetDB to report fully "running" (not "starting")
     # before invoking the replica provision orchestrator, to reduce the odds
     # of the known race described below. See PE-42816.
-    peadm::wait_until_service_ready('all', $primary_target)
+    peadm::wait_until_service_ready('all', $primary_target, $service_ready_timeout)
 
     # Run the PE Replica Provision
     #

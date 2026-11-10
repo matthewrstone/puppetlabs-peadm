@@ -139,6 +139,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/functions/get_node_group_environment_spec.rb spec/plans/subplans/install_spec.rb spec/plans/install_spec.rb` passes. By hand, `bolt plan run peadm::install ... pe_conf_data='{"pe_install::install::classification::pe_node_group_environment":"dev","puppet_enterprise::master::recover_configuration::pe_environment":"dev"}'` stubs `/etc/puppetlabs/code-staging/environments/dev/manifests/site.pp`; the same with `Dev-1` fails at the start naming the name.
 - **Scenario:** I-02. **Status:** spec shows it. Cluster run to be recorded by plan 01-13 if done.
 
+### P1-16 Install classified the PE node groups into production even when pe_conf_data named another environment
+
+- **Complaint:** PE-39789 and PE-39465: with `pe_conf_data` naming a non-production environment, `peadm::subplans::configure` still applied `peadm::setup::node_manager` with its default `node_group_environment` of `production`, so the PE node groups that peadm creates at install time were classified into an environment that does not match what PE was installed with. Also related: GJira-11 (readiness waits on slow nodes), which is why `peadm::install` now takes `service_ready_timeout`.
+- **Fix:** the P1-16 commit (ledger row P1-16). `peadm::subplans::configure` takes `node_group_environment` and passes it into the `node_manager` class declaration; `peadm::install` forwards the environment it resolved in P1-15. `peadm::install` also takes `service_ready_timeout` (default 60) and passes it to every readiness wait on the install path. Fixes the classification part of PE-39789.
+- **Reproduce (before):** on the parent of the P1-16 commit, copy in the new `spec/plans/subplans/configure_spec.rb` and run `bundle exec rspec spec/plans/subplans/configure_spec.rb -e 'is mapped into the peadm::setup::node_manager class declaration'`. It fails because the declaration passes no `node_group_environment`, so the class default applies.
+- **Demonstrate (after):** `bundle exec rspec spec/plans/install_spec.rb spec/plans/subplans/configure_spec.rb spec/plans/subplans/install_spec.rb` passes. The static example reads the `node_manager` declaration in `plans/subplans/configure.pp` (BoltSpec cannot see parameters inside an `apply()` block); what the class does with a non-production value is covered by `spec/classes/setup/node_manager_spec.rb`. The install examples pass `service_ready_timeout => 300` and see it, and the environment, reach both subplans.
+- **Scenario:** I-02. **Status:** spec shows it, not cluster-verified.
+
 ## Template
 
 ```markdown

@@ -33,6 +33,11 @@
 #   this plan stubs and commits to file-sync. Resolved by peadm::install from
 #   the environment keys of pe_conf_data. Defaults to production.
 #
+# @param service_ready_timeout
+#   Seconds each readiness wait on the primary (before the file-sync commit
+#   and after the post-install Puppet run) may take before it fails with a
+#   report. Defaults to 60.
+#
 # @param pe_installer_source
 #   The URL to download the Puppet Enterprise installer media from. If not
 #   specified, PEAdm will attempt to download PE installation media from its
@@ -77,6 +82,7 @@ plan peadm::subplans::install (
   Peadm::Download_mode  $download_mode          = 'bolthost',
   Boolean               $permit_unsafe_versions = false,
   String                $token_lifetime         = '1y',
+  Integer[1]            $service_ready_timeout  = 60,
 ) {
   peadm::assert_supported_pe_version($version, $permit_unsafe_versions)
 
@@ -511,7 +517,7 @@ plan peadm::subplans::install (
   # P1-07: peadm::code_manager now fails when the file-sync API call fails
   # instead of reporting success. The previous steps can leave puppetserver
   # still starting, so make sure it is taking requests before the commit.
-  peadm::wait_until_service_ready('pe-master', $primary_target)
+  peadm::wait_until_service_ready('pe-master', $primary_target, $service_ready_timeout)
 
   run_task('peadm::code_manager', $primary_target,
     action => 'file-sync commit',
@@ -546,7 +552,7 @@ plan peadm::subplans::install (
   # taking requests before proceeding. It takes two runs to fully finish
   # configuration.
   run_task('peadm::puppet_runonce', $primary_target)
-  peadm::wait_until_service_ready('pe-master', $primary_target)
+  peadm::wait_until_service_ready('pe-master', $primary_target, $service_ready_timeout)
   run_task('peadm::puppet_runonce', $primary_target)
 
   # PE-45431 (ca-db-default epic): On Large/XL/external-Postgres topologies,
