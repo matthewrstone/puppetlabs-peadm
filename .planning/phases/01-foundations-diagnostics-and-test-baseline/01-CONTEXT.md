@@ -28,6 +28,7 @@ Operators see why a plan failed; maintainers get the shared helpers (failure rep
 - **D-08:** Bump `puppetlabs_spec_helper` to 9, `rspec-puppet` to 5 and pin fixtures to tags in one change on the existing Ruby 3.1 / Puppet 8 lane, fixing fallout in the same plan. Lint baseline must not regress.
 - **D-09:** The Puppet 9 lane and the credentialed Bolt 5 lane are informational and non-blocking (continue-on-error). Puppet 8 stays the merge gate. The Bolt 5 lane runs only when the Puppet Core token secret is present.
 - **D-10:** The shell-task harness is an RSpec helper that builds a temp dir of stub executables (`systemctl`, `tar`, `puppet-enterprise-installer`, ...), prepends it to PATH, runs the task with `PT_*` env vars and asserts on stdout and exit code. It runs inside `rake spec` and turns the hand-run P0-4 and P0-6 checks into specs.
+  - **Approved deviation (user, 2026-11-10, plan checking):** the installer is a fake script inside a real tarball, not a PATH stub, because pe_install.sh runs it by path from the extracted directory; `tar` is the real binary so the task's first-entry derivation of the installer directory is exercised; `systemctl`, `curl`, `sleep` (and similar per spec) are PATH stubs. Implemented in plan 01-04 and recorded in ledger row P1-04.
 - **D-11:** `data/pe_versions.yaml` gains a `default` key read via `peadm::supported_pe_versions`; `plans/install.pp` reads it instead of a hardcoded version. A spec asserts `default` lies within `oldest..newest`.
 
 ### First acceptance slice (TST-04)

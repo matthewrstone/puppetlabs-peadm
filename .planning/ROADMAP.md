@@ -48,7 +48,7 @@ Plans:
 - [ ] 01-11-PLAN.md — Backup/restore/restore_ca/migrate in non-production environments; restore and migrate deadline; shared CA backend detection
 - [ ] 01-12-PLAN.md — Secret file copies 0600 (gated by the replica read check in 01-13), token file 0600, planted-secret plan-output spec and signed-URL fix
 - [ ] 01-13-PLAN.md — Acceptance slice (U-13), node checks and a replica read check (one added replica), real-cluster and CI runs, Jira P0-1..P0-3, results recorded
-- [ ] 01-14-PLAN.md — Contingency changes from the cluster results (the add_replica `ca` wait if its endpoint is confirmed; the secrets/ default revert if the replica read check failed); commit hashes by Ledger-ID trailer and traceability audit
+- [ ] 01-14-PLAN.md — Contingency changes from the cluster results (the add_replica `ca` wait if its endpoint is confirmed; a user decision on the secrets/ mode if the replica read check failed); commit hashes by Ledger-ID trailer and traceability audit
 
 ### Phase 2: Safe Upgrade
 **Goal**: An upgrade of any supported size is checked before anything is touched, can resume at any step, and reports success only when the cluster is verified healthy on the target version
