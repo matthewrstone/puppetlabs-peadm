@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 1
+current_phase: 01
 current_phase_name: Foundations, Diagnostics and Test Baseline
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-11-10T15:45:27.947Z"
+status: executing
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-11-10T20:00:22.807Z"
 last_activity: 2026-11-10
-last_activity_desc: Roadmap created (5 phases, 46/46 v1 requirements mapped)
-state_head: 2ae2f048de8a19dbde522211a9afafccd65a228e
+last_activity_desc: Phase 01 execution started
+state_head: 25750bca58fc76bafe063c16b8ac685b044d178a
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 14
+  completed_plans: 1
   percent: 0
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-10)
 
 **Core value:** Installing, upgrading and operating a Puppet Enterprise installation of any size with PEADM must succeed predictably, and when it can't, it must fail early, explain itself, and be recoverable.
-**Current focus:** Phase 1 - Foundations, Diagnostics and Test Baseline
+**Current focus:** Phase 01 — Foundations, Diagnostics and Test Baseline
 
 ## Current Position
 
-Phase: 1 of 5 (Foundations, Diagnostics and Test Baseline)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-11-10 — Roadmap created (5 phases, 46/46 v1 requirements mapped)
+Phase: 01 (Foundations, Diagnostics and Test Baseline) — EXECUTING
+Plan: 2 of 14
+Status: Ready to execute
+Last activity: 2026-11-10 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -52,6 +52,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 10 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -65,6 +70,7 @@ Recent decisions affecting current work:
 - [Roadmap]: Failover (Phase 4) is independent of rollback and can run in parallel with Phase 3
 - [Roadmap]: CD4PE/SCM verify hooks in upgrade and failover (CDP-08) sit in Phase 5 because they need Phases 2 and 4
 - [Roadmap]: TRC-01 to TRC-03 mapped to Phase 1 but practiced in every phase
+- [Phase 01]: Ruby floor is 3.3; shared ci.yml module_ci Puppet 8 job still runs Ruby 3.2, so code must stay Ruby 3.2 compatible — puppet_litmus maps Puppet 8 to Ruby 3.2; spec.yml get-matrix rewrites it to 3.3
 
 ### Pending Todos
 
@@ -91,6 +97,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T15:45:27.784Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-foundations-diagnostics-and-test-baseline/01-CONTEXT.md
+Last session: 2026-11-10T20:00:22.614Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
