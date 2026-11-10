@@ -66,7 +66,7 @@ Requirements for this release. Each maps to a roadmap phase. Evidence for each i
 - [ ] **TST-03**: Operator can run peadm on PE 2026.0 and Puppet 9: `bootstrap.cfg` handling and RSA-only key parsing (`PKey.read`) are fixed. Per D-07 the `PKey.read` fix in Phase 1 is limited to `tasks/code_sync_status.rb`; the other RSA-only sites are recorded follow-ups. Widening the Puppet version range in `metadata.json` is deferred until the Puppet 9 lane is green (user decision during Phase 1 planning)
 - [ ] **TST-04**: Maintainer has a first acceptance slice (install, upgrade n to n+1, injected failure and resume) before upgrade and failover code changes
 - [x] **TST-05**: Maintainer has a stub-PATH harness so shell tasks can be tested without a real installer
-- [ ] **TST-06**: Maintainer has the default PE version in `plans/install.pp` derived from `data/pe_versions.yaml` so they cannot drift
+- [x] **TST-06**: Maintainer has the default PE version in `plans/install.pp` derived from `data/pe_versions.yaml` so they cannot drift
 
 ### Traceability
 
@@ -122,7 +122,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TST-03 | Phase 1 | Pending |
 | TST-04 | Phase 1 | Pending |
 | TST-05 | Phase 1 | Complete |
-| TST-06 | Phase 1 | Pending |
+| TST-06 | Phase 1 | Complete |
 | TRC-01 | Phase 1 | Complete |
 | TRC-02 | Phase 1 | Pending |
 | TRC-03 | Phase 1 | Pending |

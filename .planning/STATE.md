@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Foundations, Diagnostics and Test Baseline
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-11-10T21:22:31.534Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-11-10T21:30:41.950Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 01 execution started
-state_head: c4e428aaa8e7f5f8ce39e9c48afec339a895fc85
+state_head: 1da6a144d56187a8f352a796d243376dec27a29d
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 14
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-10)
 ## Current Position
 
 Phase: 01 (Foundations, Diagnostics and Test Baseline) — EXECUTING
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Ready to execute
 Last activity: 2026-11-10 — Phase 01 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P05 | 11 min | 3 tasks | 11 files |
 | Phase 1 P06 | 35 min | 2 tasks | 13 files |
 | Phase 01 P07 | 40 min | 3 tasks | 12 files |
+| Phase 01 P08 | 8 min | 1 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,7 @@ Recent decisions affecting current work:
 - [Phase 1]: 01-06: wait_until_available in upgrade and convert uses max(120, service_ready_timeout)
 - [Phase 01]: 01-07: PeadmCertCheck chain verification clamps the verify time to a moment the leaf is valid (not_after - 1 s) so a leaf's expiry is reported once by cert_expired; cert_revoked only when the CRL issuer is the certificate issuer
 - [Phase 01]: 01-07: Tasks that use files/cert_check.rb load it with require_relative '../files/cert_check' and list peadm/files/cert_check.rb in their JSON files; 15 RSA-only host-key sites remain as ledger follow-ups (D-07)
+- [Phase 01]: [01-08] Struct key for the install default is quoted ("default") because default is a Puppet reserved word
 
 ### Pending Todos
 
@@ -114,6 +116,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T21:22:31.305Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-11-10T21:30:41.676Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None
