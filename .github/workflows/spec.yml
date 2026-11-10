@@ -35,11 +35,11 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
         if: ${{ github.repository_owner == 'puppetlabs' }}
-      - name: Activate Ruby 3.1
+      - name: Activate Ruby 3.3
         uses: ruby/setup-ruby@v1
         if: ${{ github.repository_owner == 'puppetlabs' }}
         with:
-          ruby-version: '3.1'
+          ruby-version: '3.3'
           bundler-cache: true
       - name: Print bundle environment
         if: ${{ github.repository_owner == 'puppetlabs' }}
@@ -55,7 +55,11 @@ jobs:
         id: get-matrix
         run: |
           if [ '${{ github.repository_owner }}' == 'puppetlabs' ]; then
-            bundle exec matrix_from_metadata_v2
+            # puppet_litmus maps Puppet 8 to Ruby 3.2, but this repo's floor is Ruby 3.3, so rewrite it here.
+            # If the tool's output format changes the substitution does not match and 3.2 stays (safe); the shared ci.yml still runs Puppet 8 on Ruby 3.2.
+            MATRIX_OUT="$(mktemp)"
+            GITHUB_OUTPUT="$MATRIX_OUT" bundle exec matrix_from_metadata_v2
+            sed -E 's/"ruby_version":3\.2([,}])/"ruby_version":3.3\1/g' "$MATRIX_OUT" >> "$GITHUB_OUTPUT"
           else
             echo  "::set-output name=spec_matrix::{}"
           fi
@@ -144,10 +148,10 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
-      - name: Activate Ruby 3.1
+      - name: Activate Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.1'
+          ruby-version: '3.3'
           bundler-cache: true
       # puppetlabs_spec_helper has no parallel_spec equivalent of the spec:simplecov task, so
       # coverage runs as its own single, non-parallelized job rather than joining the Spec

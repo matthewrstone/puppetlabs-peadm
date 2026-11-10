@@ -45,6 +45,14 @@ Each scenario in `documentation/test-scenarios.md` lists its own source tickets 
 | D-1 | This ledger. | `documentation/change-ledger.md` | | | | | `ebecdec` |
 | D-2 | Fix log: each Phase 0 fix mapped to its complaint, with how to reproduce and demonstrate the difference. The before/after recipe was run on P0-5. | `documentation/fix-log.md` | | | | Recipe run on P0-5 (5 failures before, 26 passing after) | |
 
+## Phase 1: foundations, diagnostics and test baseline
+
+Ticket keys: a change with a ticket in the feedback file starts its commit subject with that ticket (for example `(PE-46598)`). A change with none starts with its ledger ID as a placeholder (for example `(P1-01)`), and work that extends P0-1 to P0-3 uses those IDs. These are the same placeholders TRC-03 replaces once the tickets are filed; placeholder rows need a ticket before release. Every commit also carries a `Ledger-ID: P1-nn` trailer, and the Commit column is filled by matching it.
+
+| ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
+|---|---|---|---|---|---|---|---|
+| P1-01 | Ruby floor raised from 3.1 to 3.3 in `.ruby-version`, CLAUDE.md and all 23 workflow files (done in plans 01-01 and 01-02). D-08's "existing Ruby 3.1 lane" wording is superseded: puppetlabs_spec_helper 9 needs Ruby >= 3.2 and the floor was set to 3.3 by decision. The `spec.yml` Puppet 8 Spec matrix now runs Ruby 3.3 (the `get-matrix` step rewrites puppet_litmus' Ruby 3.2 entry), while the shared `ci.yml` Puppet 8 job (module_ci) still runs Ruby 3.2, so code must stay Ruby 3.2 compatible. A pdk template sync can revert `spec.yml`. | `.ruby-version`, `.github/workflows/spec.yml` | None filed | | Related (supports testing) | The real `get-matrix` step was run locally and emits the Puppet 8 entry with Ruby 3.3; static checks pass | |
+
 ## Tickets that need filing
 
 These changes fixed real defects that have no ticket. File one for each so the commit subject can carry its ID.
