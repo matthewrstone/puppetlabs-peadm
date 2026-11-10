@@ -115,6 +115,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/wait_until_service_ready_spec.rb spec/plans/add_replica_spec.rb` passes. With `timeout: 9, interval: 3` and a stub `curl` answering 503, the task makes 3 attempts and prints `Timed out after 9s waiting for pe-master on https://localhost:8140/status/v1/simple/pe-master`, `HTTP 503`, the failed unit and the log tail, with a planted `password=FAKE-SECRET-pw` redacted. The add_replica example passes `service_ready_timeout => 300` and sees `timeout => 300` on the `pe-master` wait before the `enable` call. For P1-09, `bundle exec rspec spec/plans/upgrade_spec.rb spec/plans/convert_spec.rb` passes; the new examples pass `service_ready_timeout => 240` with a pcp compiler and see `timeout => 240` on every wait, and a static check confirms every `wait_until_available` uses the `max(120, ...)` form.
 - **Scenario:** none yet. **Status:** spec shows it, not run on a cluster.
 
+### P1-11 Tasks failed on nodes whose Puppet host key is not RSA
+
+- **Complaint:** CASE-032 reported RSA-only key parsing in cd4peadm. The same constructor, `OpenSSL::PKey::RSA.new(File.read(Puppet.settings[:hostprivkey]))`, is in 16 peadm task sites, so on a node whose Puppet host key is EC or Ed25519 each of those tasks fails with `incorrect pkey type`. No Jira ticket filed.
+- **Fix:** the P1-11 commit (ledger rows P1-10 and P1-11). `tasks/code_sync_status.rb` now loads the host key through `PeadmCertCheck.load_key` (`OpenSSL::PKey.read`), the shared checker added in P1-10, and its JSON ships the module. Fixes it for `code_sync_status` only; the other 15 sites are listed under "Follow-ups from P1-11" in the change ledger and are not edited.
+- **Reproduce (before):** on the parent of the P1-11 commit, copy in the new `spec/unit/task/code_sync_status_spec.rb` and run `bundle exec rspec spec/unit/task/code_sync_status_spec.rb`. The EC-key example raises `incorrect pkey type: id-ecPublicKey` (3 of 13 examples fail there).
+- **Demonstrate (after):** `bundle exec rspec spec/unit/task/code_sync_status_spec.rb` passes. The EC example writes a real prime256v1 key to a temp file, points `hostprivkey` at it, and `https_client` builds with that key and `VERIFY_PEER`. To see the checker itself on a real file: `bolt task run peadm::validate_cert cert_path=<cert> key_path=<key> -t <node>` prints `{ok, findings}`.
+- **Scenario:** none yet. **Status:** spec shows it for `code_sync_status` only. Not run on a node with an EC host key.
+
 ## Template
 
 ```markdown
