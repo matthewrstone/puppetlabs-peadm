@@ -171,6 +171,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/ca_storage_backend_spec.rb spec/plans/backup_spec.rb spec/plans/restore_spec.rb` passes. The task spec builds the four layouts under a temp `PEADM_ROOT` and shows `database` with the `services.d` file as `source`. By hand on a primary, `bolt task run peadm::ca_storage_backend -t <primary>` prints the backend, the matched file and the three locations checked.
 - **Scenario:** B-01 (backup and restore). **Status:** spec shows it. On-node check on PE 2026.0.1 pending plan 01-13.
 
+### P1-21 Orchestrator and console secret keys were copied world-readable
+
+- **Complaint:** none filed (found in code review, CONCERNS.md). `peadm::util::copy_file` wrote every file it copied with mode 0644, including the orchestration and console encryption key stores under `secrets/` that `peadm::add_replica` and the configure subplan copy to each replica, so any local user on a replica could read them.
+- **Fix:** the P1-21 commit (ledger row P1-21). `copy_file` takes an optional `mode`; without one a path with a `/secrets/` directory gets 0600 and anything else 0644, owner and group stay root:root. Fixes the world-readable copies. Whether the replica's PE services can still read the 0600 files before PE's own Puppet run fixes ownership is the open risk, and it is checked, not assumed: plan 01-13's acceptance run adds a replica and verifies the read.
+- **Reproduce (before):** on the parent of the P1-21 commit, copy in the new `spec/plans/util/copy_file_spec.rb` and run `bundle exec rspec spec/plans/util/copy_file_spec.rb -e 'copies each secrets/ key store with mode 0600'`. The plan has no mode parameter and passes `mode => '0644'` to `peadm::mkdir_p_file` for the key stores. By hand, after `peadm::add_replica`, `stat -c %a /etc/puppetlabs/console-services/conf.d/secrets/keys.json` on the replica prints `644`.
+- **Demonstrate (after):** `bundle exec rspec spec/plans/util/copy_file_spec.rb spec/plans/add_replica_spec.rb spec/plans/subplans/configure_spec.rb` passes. The copy_file examples show `mode => '0600'` for all three key stores, `0644` for `hiera.yaml`, an explicit mode winning, and invalid modes rejected. By hand, the same `stat` on the replica prints `600`, and `systemctl is-active pe-orchestration-services pe-console-services` reports `active` (the replica read check in plan 01-13).
+- **Scenario:** P-01. **Status:** spec shows the modes. Replica read check pending plan 01-13; if it fails, plan 01-14 stops at a user decision before any mode change.
+
 ## Template
 
 ```markdown
