@@ -356,4 +356,47 @@ describe 'peadm::convert' do
       expect(result.value.msg).to match(%r{inconsistent availability group state})
     end
   end
+
+  # P0-1 class (FND-04): begin_at_step is validated by its Peadm::ConvertSteps type before the
+  # body runs, and node_group_environment (which reads pe.conf from the primary) is resolved in
+  # the body, so a bad step name fails before anything contacts the primary.
+  context 'begin_at_step validation and node_group_environment resolution' do
+    # Catches: a revert to a remote default on node_group_environment (an invalid step would
+    # then run peadm::read_file on the primary first) or to an untyped begin_at_step.
+    it 'rejects an unknown begin_at_step naming the type and valid steps, before any task runs' do
+      allow_out_message
+
+      result = run_plan('peadm::convert', 'primary_host' => 'primary', 'begin_at_step' => 'bogus')
+
+      expect(result).not_to be_ok
+      expect(result.value.msg).to include('Peadm::ConvertSteps')
+      expect(result.value.msg).to include('modify-primary-certs')
+    end
+
+    context 'with a valid plan run' do
+      before(:each) do
+        allow_out_message
+        allow_any_command
+        allow_any_task
+        allow_apply
+        allow_plan('peadm::modify_certificate').always_return({})
+        expect_task('peadm::read_file').with_params('path' => '/opt/puppetlabs/server/pe_version').always_return({ 'content' => '2021.7.9' })
+        expect_task('peadm::cert_data').return_for_targets('primary' => { 'extensions' => {} }).be_called_times(2)
+        expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' })
+      end
+
+      # Catches: dropping the pe.conf fallback when node_group_environment is omitted.
+      it 'reads node_group_environment from pe.conf when omitted' do
+        expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').always_return({ 'content' => '{}' }).be_called_times(1)
+
+        expect(run_plan('peadm::convert', 'primary_host' => 'primary')).to be_ok
+      end
+
+      it 'does not read pe.conf for the environment when node_group_environment is given' do
+        expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').not_be_called
+
+        expect(run_plan('peadm::convert', 'primary_host' => 'primary', 'node_group_environment' => 'dev')).to be_ok
+      end
+    end
+  end
 end

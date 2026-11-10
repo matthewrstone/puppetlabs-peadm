@@ -5,7 +5,7 @@
 # management using PEAdm.
 #
 # @param begin_at_step The step where the plan should start. If not set, it will start at the beginning
-# @param node_group_environment environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+# @param node_group_environment environment for the PEADM specific node groups, if not set it is read from the primary's pe.conf, or production
 # @param service_ready_timeout Seconds each service readiness wait may take before it fails with a report. Default 60.
 #   The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
 #
@@ -30,8 +30,15 @@ plan peadm::convert (
   Integer[1]                        $service_ready_timeout            = 60,
 
   Optional[Peadm::ConvertSteps] $begin_at_step = undef,
-  String[1] $node_group_environment = peadm::get_node_group_environment($primary_host),
+  Optional[String[1]] $node_group_environment = undef,
 ) {
+  # Resolved here, after parameter validation, so that an invalid begin_at_step
+  # fails on its type before anything contacts the primary.
+  $resolved_node_group_environment = $node_group_environment ? {
+    undef   => peadm::get_node_group_environment($primary_host),
+    default => $node_group_environment,
+  }
+
   peadm::assert_supported_bolt_version()
 
   # TODO: read and validate convertable PE version
@@ -444,7 +451,7 @@ plan peadm::convert (
           compiler_pool_address            => $compiler_pool_address,
           internal_compiler_a_pool_address => $internal_compiler_a_pool_address,
           internal_compiler_b_pool_address => $internal_compiler_b_pool_address,
-          node_group_environment           => $node_group_environment,
+          node_group_environment           => $resolved_node_group_environment,
           require                          => Class['peadm::setup::node_manager_yaml'],
         }
 

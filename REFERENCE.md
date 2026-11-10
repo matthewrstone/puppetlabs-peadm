@@ -2367,11 +2367,11 @@ Default value: `undef`
 
 ##### <a name="-peadm--convert--node_group_environment"></a>`node_group_environment`
 
-Data type: `String[1]`
+Data type: `Optional[String[1]]`
 
-environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+environment for the PEADM specific node groups, if not set it is read from the primary's pe.conf, or production
 
-Default value: `peadm::get_node_group_environment($primary_host)`
+Default value: `undef`
 
 ##### <a name="-peadm--convert--service_ready_timeout"></a>`service_ready_timeout`
 
@@ -3188,11 +3188,11 @@ Default value: `undef`
 
 ##### <a name="-peadm--upgrade--node_group_environment"></a>`node_group_environment`
 
-Data type: `String[1]`
+Data type: `Optional[String[1]]`
 
-environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+environment for the PEADM specific node groups, if not set it is read from the primary's pe.conf, or production
 
-Default value: `peadm::get_node_group_environment($primary_host)`
+Default value: `undef`
 
 ##### <a name="-peadm--upgrade--service_ready_timeout"></a>`service_ready_timeout`
 

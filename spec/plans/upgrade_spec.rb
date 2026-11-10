@@ -705,4 +705,57 @@ describe 'peadm::upgrade' do
       end
     end
   end
+
+  # P0-1 class (FND-04): begin_at_step is validated by its Peadm::UpgradeSteps type before the
+  # body runs, and node_group_environment (which reads pe.conf from the primary) is resolved in
+  # the body, so a bad step name fails before anything contacts the primary.
+  context 'begin_at_step validation and node_group_environment resolution' do
+    let(:pe_conf_staging) do
+      { 'content' => '{"pe_install::install::classification::pe_node_group_environment": "staging", ' \
+                     '"puppet_enterprise::master::recover_configuration::pe_environment": "staging"}' }
+    end
+
+    def stub_upgrade_calls(pe_conf_reads: nil)
+      allow_standard_non_returning_calls
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::read_file').with_params('path' => '/opt/puppetlabs/server/pe_build').always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary).be_called_times(1)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+      pe_conf = expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf')
+      pe_conf_reads.nil? ? pe_conf.always_return({ 'content' => '{}' }) : pe_conf.return { |targets:, **| Bolt::ResultSet.new(targets.map { |t| Bolt::Result.new(t, value: pe_conf_reads) }) }
+    end
+
+    # Catches: a revert to a remote default on node_group_environment (an invalid step would
+    # then run peadm::read_file on the primary first) or to an untyped begin_at_step.
+    it 'rejects an unknown begin_at_step naming the type and valid steps, before any task, command or plan runs' do
+      allow_out_message
+
+      result = run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9', 'begin_at_step' => 'bogus')
+
+      expect(result).not_to be_ok
+      expect(result.value.msg).to include('Peadm::UpgradeSteps')
+      expect(result.value.msg).to include('preparation')
+      expect(result.value.msg).to include('finalize')
+    end
+
+    # Catches: logging the raw (undef) parameter instead of the resolved value.
+    it 'reads node_group_environment from pe.conf when omitted and logs the resolved value' do
+      stub_upgrade_calls(pe_conf_reads: pe_conf_staging)
+      expect_out_message.with_params("Parameter 'node_group_environment': [staging]")
+
+      expect(run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9')).to be_ok
+    end
+
+    it 'does not read pe.conf for the environment when node_group_environment is given' do
+      allow_standard_non_returning_calls
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::read_file').with_params('path' => '/opt/puppetlabs/server/pe_build').always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').not_be_called
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary).be_called_times(1)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+      expect_out_message.with_params("Parameter 'node_group_environment': [dev]")
+
+      expect(run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9', 'node_group_environment' => 'dev')).to be_ok
+    end
+  end
 end
