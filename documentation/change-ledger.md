@@ -43,6 +43,7 @@ Each scenario in `documentation/test-scenarios.md` lists its own source tickets 
 | ID | Change | Files | Jira | Cases | Relation | Tests | Commit |
 |---|---|---|---|---|---|---|---|
 | D-1 | This ledger. | `documentation/change-ledger.md` | | | | | `ebecdec` |
+| D-2 | Fix log: each Phase 0 fix mapped to its complaint, with how to reproduce and demonstrate the difference. The before/after recipe was run on P0-5. | `documentation/fix-log.md` | | | | Recipe run on P0-5 (5 failures before, 26 passing after) | |
 
 ## Tickets that need filing
 

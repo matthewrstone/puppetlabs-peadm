@@ -32,6 +32,7 @@ Installing, upgrading and operating a Puppet Enterprise installation of any size
 - [ ] CD4PE: automated install (including air-gapped), upgrade, patching/restart recovery and Bolt project reattach
 - [ ] SCM: automated install and maintenance of Secure Compliance Management
 - [ ] Each change is traceable to its support case or Jira ticket in `documentation/change-ledger.md`
+- [ ] Each fix has an entry in `documentation/fix-log.md`: the complaint it addresses and how to reproduce and demonstrate the before/after
 - [ ] Acceptance coverage per topology, driven by the scenario catalog, on top of unit specs
 
 ### Out of Scope
@@ -55,6 +56,7 @@ Installing, upgrading and operating a Puppet Enterprise installation of any size
 - **Compatibility**: Existing public plan names and parameters keep working; deprecations go through a warning period — customers run PEADM in production
 - **Validation**: rspec unit tests plus acceptance runs against real provisioned clusters per topology — failures here hit production Puppet infrastructure
 - **Traceability**: Every change logged in the change ledger with its ticket, and commit subjects start with the ticket ID
+- **Demonstrability**: Every fix is logged in `documentation/fix-log.md` with the complaint it addresses and a reproduce/demonstrate guide, so anyone can see the difference
 
 ## Key Decisions
 
