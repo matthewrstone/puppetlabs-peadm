@@ -106,6 +106,7 @@ before they get overwritten by a classification reassertion
 * [`submit_csr`](#submit_csr): Submit a certificate signing request
 * [`transform_classification_groups`](#transform_classification_groups): Transform the user groups from a source backup to a list of groups on the target server
 * [`update_pe_master_rules`](#update_pe_master_rules): Updates the PE Master group rules to support 'pe_compiler_legacy' as a pp_auth_role
+* [`validate_cert`](#validate_cert): Check a certificate, and optionally its key, chain and CRL, and report structured findings (severity, code, message). Exits 0 whenever the ch
 * [`validate_rbac_token`](#validate_rbac_token): Check an RBAC token stored in a file is valid
 * [`verify_tarball`](#verify_tarball): Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it
 * [`wait_until_service_ready`](#wait_until_service_ready): Return when the named PE service answers healthy on its status API, or fail after the timeout (default 60 seconds) with a report of what was 
@@ -1920,6 +1921,50 @@ Location of target node group yaml file and where to create the transformed file
 Updates the PE Master group rules to support 'pe_compiler_legacy' as a pp_auth_role
 
 **Supports noop?** false
+
+### <a name="validate_cert"></a>`validate_cert`
+
+Check a certificate, and optionally its key, chain and CRL, and report structured findings (severity, code, message). Exits 0 whenever the checks ran; the caller decides whether a finding fails or only warns
+
+**Supports noop?** false
+
+#### Parameters
+
+##### `cert_path`
+
+Data type: `String[1]`
+
+Path to the certificate to check (PEM or DER)
+
+##### `key_path`
+
+Data type: `Optional[String[1]]`
+
+Path to the private key (PEM or DER; RSA, EC or Ed25519). When given, the key must match the certificate
+
+##### `chain_path`
+
+Data type: `Optional[String[1]]`
+
+Path to a PEM bundle of intermediate and root certificates. When given, the certificate is verified against it
+
+##### `crl_path`
+
+Data type: `Optional[String[1]]`
+
+Path to a certificate revocation list (PEM with a BEGIN X509 CRL header, or DER). When given, the CRL is checked for staleness, issuer and revocation of the certificate
+
+##### `warn_days`
+
+Data type: `Optional[Integer[0]]`
+
+Report a warning when the certificate expires within this many days (default 30)
+
+##### `key_passphrase`
+
+Data type: `Optional[String[1]]`
+
+Passphrase for an encrypted private key
 
 ### <a name="validate_rbac_token"></a>`validate_rbac_token`
 

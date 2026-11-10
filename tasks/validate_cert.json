@@ -1,0 +1,34 @@
+{
+  "puppet_task_version": 1,
+  "supports_noop": false,
+  "description": "Check a certificate, and optionally its key, chain and CRL, and report structured findings (severity, code, message). Exits 0 whenever the checks ran; the caller decides whether a finding fails or only warns",
+  "parameters": {
+    "cert_path": {
+      "type": "String[1]",
+      "description": "Path to the certificate to check (PEM or DER)"
+    },
+    "key_path": {
+      "type": "Optional[String[1]]",
+      "description": "Path to the private key (PEM or DER; RSA, EC or Ed25519). When given, the key must match the certificate"
+    },
+    "chain_path": {
+      "type": "Optional[String[1]]",
+      "description": "Path to a PEM bundle of intermediate and root certificates. When given, the certificate is verified against it"
+    },
+    "crl_path": {
+      "type": "Optional[String[1]]",
+      "description": "Path to a certificate revocation list (PEM with a BEGIN X509 CRL header, or DER). When given, the CRL is checked for staleness, issuer and revocation of the certificate"
+    },
+    "warn_days": {
+      "type": "Optional[Integer[0]]",
+      "description": "Report a warning when the certificate expires within this many days (default 30)"
+    },
+    "key_passphrase": {
+      "type": "Optional[String[1]]",
+      "description": "Passphrase for an encrypted private key",
+      "sensitive": true
+    }
+  },
+  "input_method": "stdin",
+  "files": ["peadm/files/cert_check.rb"]
+}

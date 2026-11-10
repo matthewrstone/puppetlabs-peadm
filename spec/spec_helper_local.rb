@@ -17,8 +17,10 @@ if defined?(SimpleCov)
   # puppetlabs_spec_helper's built-in SimpleCov setup (SIMPLECOV=yes) already
   # tracks lib/**/*.rb (including lib/puppet/functions/peadm/*.rb) by default,
   # but not tasks/*.rb, so task files never show up even as an explicit 0%
-  # gap. Widen the glob to add tasks/*.rb to what's already covered.
-  SimpleCov.track_files('{lib/**/*.rb,tasks/*.rb}')
+  # gap. Widen the glob to add tasks/*.rb to what's already covered, and
+  # files/*.rb (P1-10) so the shared PeadmCertCheck module counts toward the
+  # floor below.
+  SimpleCov.track_files('{lib/**/*.rb,tasks/*.rb,files/*.rb}')
 
   # PE-45737: raised from no floor to a real enforced minimum, once that
   # ticket's test-writing gave the number something real to hold at --
