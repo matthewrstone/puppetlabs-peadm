@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Success Criteria** (what must be TRUE):
   1. When an installer or service-wrapping task fails, the Bolt output shows the log tail, failed units and exit code, and a spec that plants fake secrets proves none of them appear in plan output or diagnostics
   2. Operator can run install, backup, restore and migrate against a PE whose environment is not `production`, and a `begin_at_step` value that is not a valid step name fails immediately with the valid names instead of skipping every step
-  3. One shared certificate, CRL and key check accepts PEM and DER, RSA and EC and chains, and rejects expired certificates and empty subjects with a clear message; `/tmp/pe.conf` and token files are written with restrictive modes, and `copy_file` takes an explicit mode (tightening the secret-file copies to replicas and compilers is a recorded follow-up until a replica/compiler read check can run); readiness waits, including the CA timeout, accept an overridable deadline
+  3. One shared certificate, CRL and key check accepts PEM and DER, RSA and EC and chains, and rejects expired certificates and empty subjects with a clear message; secret-file copies, `/tmp/pe.conf` and token files are written with restrictive modes; readiness waits, including the CA timeout, accept an overridable deadline
   4. Maintainer can run `rake spec` on current test gems with fixtures pinned to tags, test shell tasks through a stub-PATH harness without a real installer, and see a Puppet 9 CI lane and a credentialed Bolt 5 lane report whether peadm runs unchanged; PE 2026.0 and Puppet 9 fixes (`bootstrap.cfg`, and `PKey.read` limited to `tasks/code_sync_status.rb` per D-07 with the other RSA-only sites recorded as follow-ups) are in, the `metadata.json` Puppet range widening is a recorded deferred follow-up (user decision), and the default PE version in `plans/install.pp` is derived from `data/pe_versions.yaml`
   5. An acceptance run on a real cluster completes install, an n to n+1 upgrade, and an injected failure followed by resume; Jira tickets exist for P0-1 to P0-3; every change has a ledger entry and every fix a fix-log entry
 **Plans**: 14 plans
@@ -46,9 +46,9 @@ Plans:
 - [ ] 01-09-PLAN.md — begin_at_step validated before any remote call; step-name drift spec; Peadm::AddDatabaseSteps
 - [ ] 01-10-PLAN.md — Install path: non-production environment, readiness deadline through install, /tmp/pe.conf 0600 and removed
 - [ ] 01-11-PLAN.md — Backup/restore/restore_ca/migrate in non-production environments; restore and migrate deadline; shared CA backend detection
-- [ ] 01-12-PLAN.md — copy_file explicit mode (secrets/ tightening deferred), token file 0600, planted-secret plan-output spec and signed-URL fix
-- [ ] 01-13-PLAN.md — Acceptance slice (U-13) and node checks, real-cluster and CI runs, Jira P0-1..P0-3, results recorded
-- [ ] 01-14-PLAN.md — Contingency changes from the cluster results (incl. the add_replica `ca` wait if its endpoint is confirmed); commit hashes by Ledger-ID trailer and traceability audit
+- [ ] 01-12-PLAN.md — Secret file copies 0600 (gated by the replica read check in 01-13), token file 0600, planted-secret plan-output spec and signed-URL fix
+- [ ] 01-13-PLAN.md — Acceptance slice (U-13), node checks and a replica read check (one added replica), real-cluster and CI runs, Jira P0-1..P0-3, results recorded
+- [ ] 01-14-PLAN.md — Contingency changes from the cluster results (the add_replica `ca` wait if its endpoint is confirmed; the secrets/ default revert if the replica read check failed); commit hashes by Ledger-ID trailer and traceability audit
 
 ### Phase 2: Safe Upgrade
 **Goal**: An upgrade of any supported size is checked before anything is touched, can resume at any step, and reports success only when the cluster is verified healthy on the target version
