@@ -14,7 +14,7 @@ Requirements for this release. Each maps to a roadmap phase. Evidence for each i
 - [ ] **FND-03**: Operator gets one shared certificate, CRL and key validation (PEM and DER, RSA and EC, chains, expiry, empty subject) used by peadm tasks and by the CD4PE/SCM plans
 - [ ] **FND-04**: Operator is told immediately when `begin_at_step` is not a valid step name for the plan, instead of every step being skipped
 - [ ] **FND-05**: Operator's secrets never appear in plan output or diagnostics, checked by a spec that plants fake secrets
-- [ ] **FND-06**: Maintainer has secret-file copies and temporary PE config written with restrictive permissions, replacing today's world-readable defects: `copy_file` writing every file 0644, `/tmp/pe.conf` left behind, and the RBAC token file following the umask
+- [ ] **FND-06**: Maintainer has secret-file copies and temporary PE config written with restrictive permissions, replacing today's world-readable defects: `copy_file` writing every file 0644, `/tmp/pe.conf` left behind, and the RBAC token file following the umask. In Phase 1 the `copy_file` secrets/ copies to replicas and compilers stay 0644 behind a new explicit `mode` parameter; tightening them is a recorded follow-up until a replica/compiler read check can run (plan revision round 2, checker warning W6)
 - [ ] **FND-07**: Maintainer has readiness waits with overridable deadlines instead of fixed timeouts, including the CA timeout
 
 ### Safe Upgrade
