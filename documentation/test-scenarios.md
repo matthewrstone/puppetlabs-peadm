@@ -11,6 +11,7 @@ where the exact customer version is not worth installing, an equivalent that CI 
 | ci | runs on pull requests |
 | ci-partial | a PR workflow runs the same path but does not inject the fault |
 | ci-manual | workflow exists, run it on demand with workflow_dispatch |
+| manual | acceptance plan exists and is run by hand on operator VMs; no workflow |
 | unit | covered by rspec only |
 | new | needs an acceptance plan written |
 | repro-only | needs an environment or fault we cannot script yet |
@@ -31,6 +32,7 @@ where the exact customer version is not worth installing, an equivalent that CI 
 | [U-10](#u-10) | upgrade | 2023.8.10 → 2023.8.12 | standard | new | P3 | Patch upgrade to add target OS support |
 | [U-11](#u-11) | upgrade | 2025.8.x → 2025.10.x | standard | repro-only | P3 | Installer pre-check cannot find is_cloud_database.rb |
 | [U-12](#u-12) | upgrade | 2025.11.3 → 2025.12.0 | standard | unit | P1 | Target version newer than the module supports |
+| [U-13](#u-13) | upgrade | 2025.12.1 → 2026.0.1 | standard | manual | P1 | Resume an n to n+1 upgrade after an injected failure |
 | [D-01](#d-01) | downgrade | 2025.11.3 → 2025.10.0 | standard | unit | P1 | Downgrade attempt is blocked early |
 | [R-01](#r-01) | rollback | 2023.8.8 → 2023.8.9 (CI: 2023.8.13 → 2025.12.1) | standard-with-dr | new | P1 | Roll back a failed upgrade from a peadm backup |
 | [R-02](#r-02) | rollback | 2025.11.0 → 2025.11.2 | standard | new | P2 | Roll back by VM snapshot after a bad upgrade |
@@ -294,6 +296,31 @@ Reproduce:
 Expected:
 
 - fails with a message that says which peadm release adds support
+
+## U-13
+
+**Resume an n to n+1 upgrade after an injected failure**
+
+- Source: CASE-002, CASE-011
+- Architecture: standard
+- Fault: post-installer variant, a site.pp that fails catalog compilation is planted so the Puppet run after the installer fails; installer variant, a pe-puppetdb systemd drop-in makes the first reload fail
+
+Reproduce:
+
+1. install with `bolt plan run peadm_spec::install_test_cluster architecture=standard version=2025.12.1 code_manager_auto_configure=true console_password="$CONSOLE_PASSWORD" --inventoryfile <inventory> --modulepath spec/fixtures/modules`
+2. record the node facts with `bolt plan run peadm_spec::foundation_node_checks --inventoryfile <inventory> --modulepath spec/fixtures/modules`
+3. gate, run `bolt plan run peadm_spec::upgrade_with_injected_failure version=2026.0.1 fault=post-installer --inventoryfile <inventory> --modulepath spec/fixtures/modules` (the first peadm::upgrade fails after the installer, the plan removes the fault and resumes at upgrade-node-groups; it returns resume_ok true)
+4. repeat foundation_node_checks on the upgraded primary
+5. UPG-04 baseline, rebuild at 2025.12.1 and run the same plan with `fault=installer` (resumes at upgrade-primary; today the resume is expected to fail because pe_install deletes the tarball)
+6. cleanup after an interrupted run, restore /root/peadm_spec_site.pp.orig over the site.pp it came from (code-staging when Code Manager is on) and commit it with `puppet-code file-sync commit`, or delete the pe-puppetdb drop-in /etc/systemd/system/pe-puppetdb.service.d/peadm-spec-fault.conf and run `systemctl daemon-reload`
+
+Expected:
+
+- after the first upgrade fails, resuming at upgrade-node-groups completes the upgrade and peadm_spec::upgrade_with_injected_failure returns resume_ok true
+- the fault is gone from the node afterwards and the primary reports the target version
+- (planned) UPG-04, the installer variant resumes at upgrade-primary and completes instead of failing for want of the installer tarball
+
+Notes: Run by hand (decision D-13); peadm::upgrade has no test knob (D-14). A PE version pair other than 2025.12.1 and 2026.0.1 can be passed as plan parameters.
 
 ## D-01
 

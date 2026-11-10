@@ -25,6 +25,8 @@
 #                ci-partial   a PR workflow runs the same path but does not inject the fault
 #                ci-manual    workflow exists but is workflow_dispatch only (version and
 #                             image are inputs, so it can run on demand)
+#                manual       acceptance plan exists and is run by hand on operator VMs;
+#                             no workflow
 #                unit         covered by rspec only
 #                new          needs an acceptance plan written
 #                repro-only   needs an environment or fault we cannot script yet
@@ -280,6 +282,38 @@
     - fails with a message that says which peadm release adds support
   cases: [CASE-003, PE-47850]
   status: unit
+  priority: 1
+
+- id: U-13
+  name: Resume an n to n+1 upgrade after an injected failure
+  category: upgrade
+  from: 2025.12.1
+  to: 2026.0.1
+  arch: standard
+  fault: post-installer variant, a site.pp that fails catalog compilation is planted so the
+    Puppet run after the installer fails; installer variant, a pe-puppetdb systemd drop-in makes
+    the first reload fail
+  repro:
+    - install with `bolt plan run peadm_spec::install_test_cluster architecture=standard version=2025.12.1 code_manager_auto_configure=true console_password="$CONSOLE_PASSWORD" --inventoryfile <inventory> --modulepath spec/fixtures/modules`
+    - record the node facts with `bolt plan run peadm_spec::foundation_node_checks --inventoryfile <inventory> --modulepath spec/fixtures/modules`
+    - gate, run `bolt plan run peadm_spec::upgrade_with_injected_failure version=2026.0.1 fault=post-installer --inventoryfile <inventory> --modulepath spec/fixtures/modules`
+      (the first peadm::upgrade fails after the installer, the plan removes the fault and resumes
+      at upgrade-node-groups; it returns resume_ok true)
+    - repeat foundation_node_checks on the upgraded primary
+    - UPG-04 baseline, rebuild at 2025.12.1 and run the same plan with `fault=installer`
+      (resumes at upgrade-primary; today the resume is expected to fail because pe_install deletes the tarball)
+    - cleanup after an interrupted run, restore /root/peadm_spec_site.pp.orig over the
+      site.pp it came from (code-staging when Code Manager is on) and commit it with
+      `puppet-code file-sync commit`, or delete the pe-puppetdb drop-in
+      /etc/systemd/system/pe-puppetdb.service.d/peadm-spec-fault.conf and run `systemctl daemon-reload`
+  expect:
+    - after the first upgrade fails, resuming at upgrade-node-groups completes the upgrade and peadm_spec::upgrade_with_injected_failure returns resume_ok true
+    - the fault is gone from the node afterwards and the primary reports the target version
+    - (planned) UPG-04, the installer variant resumes at upgrade-primary and completes instead of failing for want of the installer tarball
+  notes: Run by hand (decision D-13); peadm::upgrade has no test knob (D-14). A PE
+    version pair other than 2025.12.1 and 2026.0.1 can be passed as plan parameters.
+  cases: [CASE-002, CASE-011]
+  status: manual
   priority: 1
 
 - id: D-01

@@ -12,7 +12,7 @@ module PeadmScenarios
   DOC = File.expand_path('../../documentation/test-scenarios.md', __dir__)
 
   ARCHITECTURES = ['standard', 'standard-with-dr', 'large', 'large-with-dr', 'extra-large', 'extra-large-with-dr', 'unknown'].freeze
-  STATUSES = ['ci', 'ci-partial', 'ci-manual', 'unit', 'new', 'repro-only'].freeze
+  STATUSES = ['ci', 'ci-partial', 'ci-manual', 'manual', 'unit', 'new', 'repro-only'].freeze
   CATEGORIES = ['install', 'upgrade', 'downgrade', 'rollback', 'failover', 'migrate', 'backup-restore', 'compiler', 'convert', 'replica', 'database'].freeze
   REQUIRED = ['id', 'name', 'category', 'from', 'arch', 'expect', 'cases', 'status', 'priority'].freeze
   VERSION = %r{\A\d{4}\.\d+\.(\d+|x)\z}.freeze
@@ -115,6 +115,7 @@ module PeadmScenarios
     out << '| ci | runs on pull requests |'
     out << '| ci-partial | a PR workflow runs the same path but does not inject the fault |'
     out << '| ci-manual | workflow exists, run it on demand with workflow_dispatch |'
+    out << '| manual | acceptance plan exists and is run by hand on operator VMs; no workflow |'
     out << '| unit | covered by rspec only |'
     out << '| new | needs an acceptance plan written |'
     out << '| repro-only | needs an environment or fault we cannot script yet |'
