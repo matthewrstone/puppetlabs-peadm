@@ -12,6 +12,8 @@
 #   Optional new primary PostgreSQL server to be added to the cluster
 # @param replica_postgresql_host
 #   Optional new replica PostgreSQL server to be added to the cluster
+# @param service_ready_timeout
+#   Seconds to wait for PE services to be ready on the new primary, passed to peadm::install and peadm::restore
 plan peadm::migrate (
   Peadm::SingleTargetSpec $old_primary_host,
   Peadm::SingleTargetSpec $new_primary_host,
@@ -19,6 +21,7 @@ plan peadm::migrate (
   Optional[Peadm::SingleTargetSpec] $replica_host = undef,
   Optional[Peadm::SingleTargetSpec] $primary_postgresql_host = undef,
   Optional[Peadm::SingleTargetSpec] $replica_postgresql_host = undef,
+  Integer[1] $service_ready_timeout = 60,
 ) {
   # Log parameters for debugging 
   peadm::log_plan_parameters({
@@ -28,6 +31,7 @@ plan peadm::migrate (
     'primary_postgresql_host' => $primary_postgresql_host,
     'replica_postgresql_host' => $replica_postgresql_host,
     'upgrade_version' => $upgrade_version,
+    'service_ready_timeout' => $service_ready_timeout,
   })
 
   # pre-migration checks
@@ -81,23 +85,48 @@ plan peadm::migrate (
   upload_file($download_path, $remote_backup_path, $new_primary_host)
 
   $old_primary_target = get_targets($old_primary_host)[0]
-  $old_primary_password = peadm::get_pe_conf($old_primary_target)['console_admin_password']
+  $old_primary_pe_conf = peadm::get_pe_conf($old_primary_target)
+  $old_primary_password = $old_primary_pe_conf['console_admin_password']
   $old_pe_conf = run_task('peadm::get_peadm_config', $old_primary_target).first.value
 
-  run_plan('peadm::install', {
-      primary_host                => $new_primary_host,
-      console_password            => $old_primary_password,
-      code_manager_auto_configure => true,
-      download_mode               => 'direct',
-      version                     => $old_pe_conf['pe_version'],
-  })
+  # The environment the old cluster's PE node groups are classified into
+  # (production unless pe.conf says otherwise). The new primary is installed
+  # into the same environment and the backup is restored into it, so that a
+  # non-production cluster does not come up as a production one. (PE-46598)
+  $node_group_environment = peadm::get_node_group_environment($old_primary_pe_conf)
+  out::message("Old primary uses the '${node_group_environment}' environment")
 
-  run_plan('peadm::restore', {
-      targets          => $new_primary_host,
-      restore_type     => 'migration',
-      input_file       => $remote_backup_path,
-      console_password => $old_primary_password,
-  })
+  if $node_group_environment == 'production' {
+    $install_environment_params = {}
+    $restore_environment_params = {}
+  } else {
+    $install_environment_params = {
+      pe_conf_data => {
+        'pe_install::install::classification::pe_node_group_environment'   => $node_group_environment,
+        'puppet_enterprise::master::recover_configuration::pe_environment' => $node_group_environment,
+      },
+    }
+    $restore_environment_params = { node_group_environment => $node_group_environment }
+  }
+
+  $install_params = {
+    primary_host                => $new_primary_host,
+    console_password            => $old_primary_password,
+    code_manager_auto_configure => true,
+    download_mode               => 'direct',
+    version                     => $old_pe_conf['pe_version'],
+    service_ready_timeout       => $service_ready_timeout,
+  } + $install_environment_params
+  run_plan('peadm::install', $install_params)
+
+  $restore_params = {
+    targets               => $new_primary_host,
+    restore_type          => 'migration',
+    input_file            => $remote_backup_path,
+    console_password      => $old_primary_password,
+    service_ready_timeout => $service_ready_timeout,
+  } + $restore_environment_params
+  run_plan('peadm::restore', $restore_params)
 
   $node_types = {
     'primary_host'             => $old_pe_conf['params']['primary_host'],

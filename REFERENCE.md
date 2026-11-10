@@ -132,7 +132,7 @@ Supported use cases:
 * [`peadm::modify_certificate`](#peadm--modify_certificate): Modify the certificate of one or more targets
 * [`peadm::replace_failed_postgresql`](#peadm--replace_failed_postgresql): Replaces a failed PostgreSQL host
 * [`peadm::restore`](#peadm--restore): Restore puppet primary configuration
-* [`peadm::restore_ca`](#peadm--restore_ca)
+* [`peadm::restore_ca`](#peadm--restore_ca): Restore the CA and ssl certificates from a puppet-backup certs archive
 * [`peadm::status`](#peadm--status): Return status information from one or more PE clusters in a table format
 * [`peadm::upgrade`](#peadm--upgrade): Upgrade a PEAdm-managed cluster
 * [`peadm::util::init_db_server`](#peadm--util--init_db_server): Prepare a new PostgreSQL node for an existing primary and its compilers
@@ -2792,6 +2792,7 @@ The following parameters are available in the `peadm::migrate` plan:
 * [`replica_host`](#-peadm--migrate--replica_host)
 * [`primary_postgresql_host`](#-peadm--migrate--primary_postgresql_host)
 * [`replica_postgresql_host`](#-peadm--migrate--replica_postgresql_host)
+* [`service_ready_timeout`](#-peadm--migrate--service_ready_timeout)
 
 ##### <a name="-peadm--migrate--old_primary_host"></a>`old_primary_host`
 
@@ -2836,6 +2837,14 @@ Data type: `Optional[Peadm::SingleTargetSpec]`
 Optional new replica PostgreSQL server to be added to the cluster
 
 Default value: `undef`
+
+##### <a name="-peadm--migrate--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds to wait for PE services to be ready on the new primary, passed to peadm::install and peadm::restore
+
+Default value: `60`
 
 ### <a name="peadm--modify_certificate"></a>`peadm::modify_certificate`
 
@@ -3021,7 +3030,7 @@ Default value: `60`
 
 ### <a name="peadm--restore_ca"></a>`peadm::restore_ca`
 
-The peadm::restore_ca class.
+Restore the CA and ssl certificates from a puppet-backup certs archive
 
 #### Parameters
 
@@ -3030,26 +3039,36 @@ The following parameters are available in the `peadm::restore_ca` plan:
 * [`target`](#-peadm--restore_ca--target)
 * [`file_path`](#-peadm--restore_ca--file_path)
 * [`recovery_directory`](#-peadm--restore_ca--recovery_directory)
+* [`node_group_environment`](#-peadm--restore_ca--node_group_environment)
 
 ##### <a name="-peadm--restore_ca--target"></a>`target`
 
 Data type: `Peadm::SingleTargetSpec`
 
-
+The primary puppetserver to restore the certificates on
 
 ##### <a name="-peadm--restore_ca--file_path"></a>`file_path`
 
 Data type: `String`
 
-
+The puppet-backup archive (scope certs) to restore from
 
 ##### <a name="-peadm--restore_ca--recovery_directory"></a>`recovery_directory`
 
 Data type: `Optional[String]`
 
-
+Temporary directory puppet-backup restore works in
 
 Default value: `'/tmp/peadm_recovery'`
+
+##### <a name="-peadm--restore_ca--node_group_environment"></a>`node_group_environment`
+
+Data type: `Optional[Peadm::Pe_environment]`
+
+The environment passed to `puppet-backup restore --pe-environment` when it is not production.
+Defaults to the one set in the target's pe.conf, then to production.
+
+Default value: `undef`
 
 ### <a name="peadm--status"></a>`peadm::status`
 
