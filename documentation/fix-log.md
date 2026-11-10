@@ -89,6 +89,16 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** the same spec passes on `7f4e82a`. `spec/functions/supported_pe_versions_spec.rb` covers the data read.
 - **Scenario:** U-12. **Status:** spec shows it.
 
+## Phase 1
+
+### P1-05 Installer failure report printed secrets from the installer log
+
+- **Complaint:** found in research while following CASE-002 and CASE-011 (mitigates GJira-1). The P0-6 report printed the last lines of the installer log verbatim, and that log can hold the console admin password, signed-URL signatures, URL userinfo passwords and private keys. Bolt prints task output unredacted, to the operator and to CI logs. No ticket filed.
+- **Fix:** this commit. New `files/failure_report.sh` redacts the whole log and then tails it, and `pe_install` uses it. Fixes the leak; the underlying reload failure is not touched.
+- **Reproduce (before):** run the spec below on this commit's parent with the new spec and harness copied in. The planted-secret example fails because the plain `tail` prints `hunter2-FAKE-SECRET`.
+- **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/pe_install_spec.rb` passes. It builds a real tarball with a fake installer, stubs `systemctl`, and asserts the planted values never reach stdout or stderr.
+- **Scenario:** U-01. **Status:** spec shows it. Not run against a real installer failure.
+
 ## Template
 
 ```markdown

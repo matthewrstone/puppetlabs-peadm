@@ -1,5 +1,6 @@
 #!/bin/bash
 source "$(dirname $0)/../../peadm/files/task_helper.sh"
+source "$(dirname $0)/../../peadm/files/failure_report.sh"
 
 # Try and ensure locale is correctly configured
 [ -z "${LANG}" ] && export LANG=$(localectl status | sed -n 's/.* LANG=\(.*\)/\1/p')
@@ -19,24 +20,15 @@ if [ "$PT_install_extra_large" = "true" ]; then
 	systemctl daemon-reload
 fi
 
-# Print what a person would otherwise have to log in and look up: the tail of
-# the most recent installer log and the state of any failed pe-* services. This
-# goes to stdout so Bolt includes it in the task failure.
-report_install_failure() {
-	installer_log_dir="${PE_INSTALLER_LOG_DIR:-/var/log/puppetlabs/installer}"
-	echo
-	echo "=== Puppet Enterprise installer failed with exit code $1 ==="
+# On failure, print what a person would otherwise have to log in and look up:
+# the redacted tail of the most recent installer log and the state of any
+# failed pe-* services (see files/failure_report.sh). This goes to stdout so
+# Bolt includes it in the task failure.
+report_installer_failure() {
+	local installer_log_dir="${PE_INSTALLER_LOG_DIR:-/var/log/puppetlabs/installer}"
+	local latest_log
 	latest_log=$(ls -t "$installer_log_dir"/*.install.log 2>/dev/null | head -n 1)
-	if [ -n "$latest_log" ]; then
-		echo "--- Last 40 lines of $latest_log"
-		tail -n 40 "$latest_log"
-	else
-		echo "--- No installer log found in $installer_log_dir"
-	fi
-	for unit in $(systemctl list-units 'pe-*' --state=failed --no-legend --plain 2>/dev/null | awk '{print $1}'); do
-		echo "--- systemctl status $unit"
-		systemctl status "$unit" --no-pager -l -n 15 2>&1
-	done
+	peadm_failure_report "$1" "Puppet Enterprise installer" "$latest_log"
 }
 
 tgzdir=$(dirname "$PT_tarball")
@@ -89,13 +81,13 @@ fi
 if [ "$PT_install_extra_large" = "true" ]; then
 	for svc in pe-puppetserver pe-orchestration-services pe-console-services; do
 		if ! systemctl is-active --quiet $svc.service; then
-			report_install_failure "$exit_code"
+			report_installer_failure "$exit_code"
 			exit $exit_code
 		fi
 	done
 	exit 0
 else
-	[ "$exit_code" -ne 0 ] && report_install_failure "$exit_code"
+	[ "$exit_code" -ne 0 ] && report_installer_failure "$exit_code"
 	# Exit with the installer script's exit code
 	exit $exit_code
 fi

@@ -20,7 +20,8 @@
   },
   "input_method": "environment",
   "files": [
-    "peadm/files/task_helper.sh"
+    "peadm/files/task_helper.sh",
+    "peadm/files/failure_report.sh"
   ],
   "implementations": [
     {"name": "pe_install.sh"}
