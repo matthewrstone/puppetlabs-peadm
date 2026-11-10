@@ -26,6 +26,10 @@ class RbacToken
   # Strings, not integers: Net::HTTPResponse#code returns a String.
   PERMANENT_STATUS_CODES = ['400', '401'].freeze
 
+  # Where the admin token is written. The file is a long-lived admin credential,
+  # so it is created 0600 (and a pre-existing file is tightened to 0600).
+  DEFAULT_TOKEN_PATH = '/root/.puppetlabs/token'
+
   # Even with a permanent status, a body that rbac-service labels a server error
   # (e.g. puppetlabs.rbac/server-error) means the failure is on the service
   # side, such as warm-up, so it stays retryable.
@@ -34,8 +38,11 @@ class RbacToken
   # Parameters expected:
   #   Hash
   #     String password
-  def initialize(params)
+  # token_path is a test seam, not a task parameter: Bolt validates task
+  # parameters against tasks/rbac_token.json.
+  def initialize(params, token_path: DEFAULT_TOKEN_PATH)
     @params = params
+    @token_path = token_path
   end
 
   def execute!
@@ -65,8 +72,7 @@ class RbacToken
     end
     token = JSON.parse(response.body)['token']
 
-    FileUtils.mkdir_p('/root/.puppetlabs')
-    File.open('/root/.puppetlabs/token', 'w') { |file| file.write(token) }
+    write_token(token)
   end
 
   # Runs the task, reporting permanent failures as a Bolt _error with a
@@ -85,6 +91,20 @@ class RbacToken
   end
 
   private
+
+  # A directory this creates is 0700; an existing one is left as it is, since
+  # other tools write there. The file is opened with perm 0600 so it is never
+  # created readable by others. That perm only applies to a file that does not
+  # exist yet, so the open file is chmod'ed to 0600 before the token goes in
+  # (the open truncates the old content first), which tightens an existing
+  # 0644 file without a window where it holds the token.
+  def write_token(token)
+    FileUtils.mkdir_p(File.dirname(@token_path), mode: 0o700)
+    File.open(@token_path, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |file|
+      file.chmod(0o600)
+      file.write(token)
+    end
+  end
 
   def permanent_failure?(response)
     PERMANENT_STATUS_CODES.include?(response.code) && !server_error_body?(response.body)

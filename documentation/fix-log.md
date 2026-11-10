@@ -179,6 +179,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/plans/util/copy_file_spec.rb spec/plans/add_replica_spec.rb spec/plans/subplans/configure_spec.rb` passes. The copy_file examples show `mode => '0600'` for all three key stores, `0644` for `hiera.yaml`, an explicit mode winning, and invalid modes rejected. By hand, the same `stat` on the replica prints `600`, and `systemctl is-active pe-orchestration-services pe-console-services` reports `active` (the replica read check in plan 01-13).
 - **Scenario:** P-01. **Status:** spec shows the modes. Replica read check pending plan 01-13; if it fails, plan 01-14 stops at a user decision before any mode change.
 
+### P1-22 The RBAC admin token file followed the umask (often 0644)
+
+- **Complaint:** none filed (found in code review, CONCERNS.md). `peadm::rbac_token` wrote the long-lived admin token to `/root/.puppetlabs/token` with `File.open(path, 'w')`, so its mode followed the umask: world-readable under the usual 022.
+- **Fix:** the P1-22 commit (ledger row P1-22). The token file is created 0600, a missing `/root/.puppetlabs` directory 0700, and an existing token file is tightened to 0600 when rewritten. Fixes it.
+- **Reproduce (before):** on the parent of the P1-22 commit, `stat -c %a /root/.puppetlabs/token` on a primary after `peadm::install` (or any run of `peadm::rbac_token`) prints `644` under a 022 umask. Without a node, on the parent run `ruby -e 'File.open("/tmp/t", "w") { |f| f.write(1) }; puts File.stat("/tmp/t").mode.to_s(8)' ` under `umask 022`: it prints `100644`, the mode the old open call gave the token file.
+- **Demonstrate (after):** `bundle exec rspec spec/unit/task/rbac_token_spec.rb` passes. The examples run the task against a real temp directory and check `File.stat` modes: directory 0700, file 0600 even with umask 000, a pre-existing 0644 file becomes 0600 holding only the new token. By hand on a primary, `stat -c '%a %U' /root/.puppetlabs/token` prints `600 root`.
+- **Scenario:** none (covered by the spec; any install scenario shows it on a node). **Status:** spec shows it, not run on a cluster.
+
 ## Template
 
 ```markdown
