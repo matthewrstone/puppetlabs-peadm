@@ -70,6 +70,26 @@ describe 'peadm::add_database' do
   end
 
   # ---------------------------------------------------------------------
+  # 0. begin_at_step is validated by its Peadm::AddDatabaseSteps type before the
+  #    body runs, so node_group_environment (which reads pe.conf from the
+  #    primary) is not resolved and no task or command is called. P0-1 class.
+  # ---------------------------------------------------------------------
+
+  # Catches: a revert to a remote default on node_group_environment, which makes
+  # an invalid step name contact the primary (peadm::read_file) before the type
+  # error is raised, and a revert to an inline Enum that drifts from the type.
+  it 'rejects an unknown begin_at_step naming the type and valid steps, before any task runs' do
+    expect_task('peadm::read_file').not_be_called
+    expect_task('peadm::get_peadm_config').not_be_called
+
+    result = run_plan('peadm::add_database', default_params.merge('begin_at_step' => 'bogus'))
+
+    expect(result).not_to be_ok
+    expect(result.value.msg).to include('Peadm::AddDatabaseSteps')
+    expect(result.value.msg).to include('init-db-node')
+  end
+
+  # ---------------------------------------------------------------------
   # 1. fail_plan guard: add_database.pp is only usable on L/XL deployments
   #    (which have compilers). Line ~32-34:
   #      if $compilers.empty and !$is_migration {

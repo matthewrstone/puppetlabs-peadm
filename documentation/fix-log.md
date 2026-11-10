@@ -123,6 +123,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/task/code_sync_status_spec.rb` passes. The EC example writes a real prime256v1 key to a temp file, points `hostprivkey` at it, and `https_client` builds with that key and `VERIFY_PEER`. To see the checker itself on a real file: `bolt task run peadm::validate_cert cert_path=<cert> key_path=<key> -t <node>` prints `{ok, findings}`.
 - **Scenario:** none yet. **Status:** spec shows it for `code_sync_status` only. Not run on a node with an EC host key.
 
+### P1-13 Step names could drift from begin_at_step types, and an invalid step contacted the primary first
+
+- **Complaint:** P0-1 (no ticket filed; related PE-44017, PE-41637): `peadm::convert` named its steps differently from `Peadm::ConvertSteps`, so a resumed run skipped every convert step, and nothing in CI compared the two. Separately, an invalid `begin_at_step` was reported only after the plan had already run a remote `peadm::read_file` on the primary (the default of `node_group_environment`), so an unreachable primary hid the real error.
+- **Fix:** the P1-13 commit. `Peadm::AddDatabaseSteps` replaces the inline `Enum` in `peadm::add_database`, and `spec/unit/step_names_spec.rb` fails when the `peadm::plan_step` names in `upgrade`, `convert` or `add_database` differ from their `Peadm::*Steps` type. `node_group_environment` is resolved in the plan body instead of in the parameter default, so the type error on `begin_at_step` is raised first, listing the valid names. Fixes the add_database case and guards the whole class. Not run on a cluster.
+- **Reproduce (before):** on the parent of the P1-13 commit, copy in the new `spec/plans/add_database_spec.rb` and run `bundle exec rspec spec/plans/add_database_spec.rb -e 'rejects an unknown begin_at_step'`. It fails with `Expected peadm::read_file to be called 0 times`, because the old plan read pe.conf from the primary before the step name was checked.
+- **Demonstrate (after):** `bundle exec rspec spec/unit/step_names_spec.rb spec/plans/add_database_spec.rb` passes. To see the guard fire, rename one `peadm::plan_step('...')` in `plans/convert.pp` and run `bundle exec rspec spec/unit/step_names_spec.rb`: the convert example fails showing the two lists. By hand, `bolt plan run peadm::add_database begin_at_step=bogus ...` now ends with `parameter 'begin_at_step' expects a match for Peadm::AddDatabaseSteps = Enum[...]` and no task has run.
+- **Scenario:** none yet. **Status:** spec shows it. Not run against a real primary.
+
 ## Template
 
 ```markdown

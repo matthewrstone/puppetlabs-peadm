@@ -55,6 +55,7 @@ before they get overwritten by a classification reassertion
 
 ### Data types
 
+* [`Peadm::AddDatabaseSteps`](#Peadm--AddDatabaseSteps): type for the different steps where the peadm::add_database plan can be started
 * [`Peadm::ConvertSteps`](#Peadm--ConvertSteps): type for the different steps where the peadm::convert plan can be started
 * [`Peadm::Download_mode`](#Peadm--Download_mode): download the installer to the bolt node and upload to targets, or let the targets download it directly
 * [`Peadm::Known_hosts`](#Peadm--Known_hosts)
@@ -1124,6 +1125,12 @@ the target to fetch the PE Infrastructure Agent group's rules from
 
 ## Data types
 
+### <a name="Peadm--AddDatabaseSteps"></a>`Peadm::AddDatabaseSteps`
+
+type for the different steps where the peadm::add_database plan can be started
+
+Alias of `Enum['init-db-node', 'replicate-db', 'update-classification', 'update-db-settings', 'cleanup-db', 'finalize']`
+
 ### <a name="Peadm--ConvertSteps"></a>`Peadm::ConvertSteps`
 
 type for the different steps where the peadm::convert plan can be started
@@ -2145,11 +2152,11 @@ The following parameters are available in the `peadm::add_database` plan:
 
 ##### <a name="-peadm--add_database--node_group_environment"></a>`node_group_environment`
 
-Data type: `String[1]`
+Data type: `Optional[String[1]]`
 
 environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
 
-Default value: `peadm::get_node_group_environment($primary_host)`
+Default value: `undef`
 
 ##### <a name="-peadm--add_database--targets"></a>`targets`
 
@@ -2173,17 +2180,7 @@ Default value: `undef`
 
 ##### <a name="-peadm--add_database--begin_at_step"></a>`begin_at_step`
 
-Data type:
-
-```puppet
-Optional[Enum[
-      'init-db-node',
-      'replicate-db',
-      'update-classification',
-      'update-db-settings',
-      'cleanup-db',
-  'finalize']]
-```
+Data type: `Optional[Peadm::AddDatabaseSteps]`
 
 
 
