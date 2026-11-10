@@ -69,12 +69,49 @@ describe 'peadm::subplans::install' do
       'version' => '2019.8.12',
     }
 
-    expect_task('peadm::wait_until_service_ready')
-      .with_targets('primary')
-      .error_with('msg' => 'Timed out waiting for service', 'kind' => 'puppetlabs.tasks/task-error')
+    # The plan now waits twice (P1-07: before the file-sync commit, and after
+    # the Puppet run). Only the second, post-install wait times out, so this
+    # still exercises the post-install failure path rather than the new one.
+    waits = 0
+    expect_task('peadm::wait_until_service_ready').with_targets('primary').be_called_times(2).return do |targets:, **|
+      waits += 1
+      results = targets.map do |target|
+        if waits == 2
+          Bolt::Result.new(target, error: { 'msg' => 'Timed out waiting for service', 'kind' => 'puppetlabs.tasks/task-error' })
+        else
+          Bolt::Result.new(target, value: {})
+        end
+      end
+      Bolt::ResultSet.new(results)
+    end
 
     result = run_plan('peadm::subplans::install', params)
     expect(result).not_to be_ok
+  end
+
+  # P1-07: peadm::code_manager now fails when the file-sync call fails, so
+  # puppetserver must be taking requests before the commit is attempted.
+  # Catches a mutation that moves the pe-master wait after the commit (or drops it).
+  it 'waits for pe-master before the file-sync commit' do
+    params = {
+      'primary_host' => 'primary',
+      'console_password' => 'puppetLabs123!',
+      'version' => '2019.8.12',
+    }
+
+    order = []
+    ok = proc { |targets| Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) }) }
+    allow_task('peadm::wait_until_service_ready').return do |targets:, params:, **|
+      order << "wait:#{params['service']}"
+      ok.call(targets)
+    end
+    allow_task('peadm::code_manager').return do |targets:, params:, **|
+      order << "code_manager:#{params['action']}"
+      ok.call(targets)
+    end
+
+    expect(run_plan('peadm::subplans::install', params)).to be_ok
+    expect(order.index('wait:pe-master')).to be < order.index('code_manager:file-sync commit')
   end
 
   it 'installs 2023.4 without r10k_known_hosts' do

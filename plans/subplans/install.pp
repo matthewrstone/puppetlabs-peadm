@@ -501,6 +501,11 @@ plan peadm::subplans::install (
     content => "# Empty manifest\n",
   )
 
+  # P1-07: peadm::code_manager now fails when the file-sync API call fails
+  # instead of reporting success. The previous steps can leave puppetserver
+  # still starting, so make sure it is taking requests before the commit.
+  peadm::wait_until_service_ready('pe-master', $primary_target)
+
   run_task('peadm::code_manager', $primary_target,
     action => 'file-sync commit',
   )
