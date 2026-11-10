@@ -9,7 +9,7 @@ Requirements for this release. Each maps to a roadmap phase. Evidence for each i
 
 ### Foundations and Diagnostics
 
-- [ ] **FND-01**: Operator sees the underlying cause (log tail, failed units, exit code, sanitized) in the Bolt output whenever an installer or service-wrapping task fails
+- [x] **FND-01**: Operator sees the underlying cause (log tail, failed units, exit code, sanitized) in the Bolt output whenever an installer or service-wrapping task fails
 - [ ] **FND-02**: Operator can run peadm plans against non-`production` PE environments for install, backup, restore and migrate (clears PE-39789, PE-46598)
 - [ ] **FND-03**: Operator gets one shared certificate, CRL and key validation (PEM and DER, RSA and EC, chains, expiry, empty subject) used by peadm tasks and by the CD4PE/SCM plans
 - [ ] **FND-04**: Operator is told immediately when `begin_at_step` is not a valid step name for the plan, instead of every step being skipped
@@ -110,7 +110,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 1 | Pending |
+| FND-01 | Phase 1 | Complete |
 | FND-02 | Phase 1 | Pending |
 | FND-03 | Phase 1 | Pending |
 | FND-04 | Phase 1 | Pending |
