@@ -32,10 +32,10 @@ group :development do
   gem "logger",    require: false if ruby4_default_gems_removed
   gem "csv",       require: false if ruby4_default_gems_removed
   gem "base64",    require: false if ruby4_default_gems_removed
-  gem "voxpupuli-puppet-lint-plugins", '~> 5.0', require: false
+  gem "voxpupuli-puppet-lint-plugins", '~> 7.0', require: false
   gem "facterdb", '~> 1.18',                     require: false
   gem "metadata-json-lint", '~> 3.0',            require: false
-  gem "puppetlabs_spec_helper", '~> 6.0',        require: false
+  gem "puppetlabs_spec_helper", '~> 9.0',        require: false
   gem "rspec-puppet-facts", '~> 2.0',            require: false
   gem "codecov", '~> 0.2',                       require: false
   gem "simplecov-cobertura", '~> 3.2',            require: false
@@ -62,7 +62,7 @@ group :system_tests do
 end
 group :release_prep do
   gem "puppet-strings", '~> 4.0',         require: false
-  gem "puppetlabs_spec_helper", '~> 6.0', require: false
+  gem "puppetlabs_spec_helper", '~> 9.0', require: false
 end
 
 puppet_version = ENV['PUPPET_GEM_VERSION']

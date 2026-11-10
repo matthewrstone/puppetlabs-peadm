@@ -74,7 +74,7 @@ class peadm::setup::node_manager (
     purge_behavior => rule,
     rule           => ['or',
       ['~', ['trusted', 'extensions', peadm::oid('peadm_role')], '^puppet/'],
-      ['~', ['fact', 'pe_server_version'], '.+']
+      ['~', ['fact', 'pe_server_version'], '.+'],
     ],
   }
 
