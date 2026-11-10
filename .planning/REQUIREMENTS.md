@@ -110,13 +110,58 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (filled in by the roadmapper) | | Pending |
+| FND-01 | Phase 1 | Pending |
+| FND-02 | Phase 1 | Pending |
+| FND-03 | Phase 1 | Pending |
+| FND-04 | Phase 1 | Pending |
+| FND-05 | Phase 1 | Pending |
+| FND-06 | Phase 1 | Pending |
+| FND-07 | Phase 1 | Pending |
+| TST-01 | Phase 1 | Pending |
+| TST-02 | Phase 1 | Pending |
+| TST-03 | Phase 1 | Pending |
+| TST-04 | Phase 1 | Pending |
+| TST-05 | Phase 1 | Pending |
+| TST-06 | Phase 1 | Pending |
+| TRC-01 | Phase 1 | Pending |
+| TRC-02 | Phase 1 | Pending |
+| TRC-03 | Phase 1 | Pending |
+| UPG-01 | Phase 2 | Pending |
+| UPG-02 | Phase 2 | Pending |
+| UPG-03 | Phase 2 | Pending |
+| UPG-04 | Phase 2 | Pending |
+| UPG-05 | Phase 2 | Pending |
+| UPG-06 | Phase 2 | Pending |
+| UPG-07 | Phase 2 | Pending |
+| RCV-01 | Phase 3 | Pending |
+| RCV-02 | Phase 3 | Pending |
+| RCV-03 | Phase 3 | Pending |
+| RCV-04 | Phase 3 | Pending |
+| RCV-05 | Phase 3 | Pending |
+| RCV-06 | Phase 3 | Pending |
+| DR-01 | Phase 4 | Pending |
+| DR-02 | Phase 4 | Pending |
+| DR-03 | Phase 4 | Pending |
+| DR-04 | Phase 4 | Pending |
+| DR-05 | Phase 4 | Pending |
+| DR-06 | Phase 4 | Pending |
+| DR-07 | Phase 4 | Pending |
+| CDP-01 | Phase 5 | Pending |
+| CDP-02 | Phase 5 | Pending |
+| CDP-03 | Phase 5 | Pending |
+| CDP-04 | Phase 5 | Pending |
+| CDP-05 | Phase 5 | Pending |
+| CDP-06 | Phase 5 | Pending |
+| CDP-07 | Phase 5 | Pending |
+| CDP-08 | Phase 5 | Pending |
+| SCM-01 | Phase 5 | Pending |
+| SCM-02 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 46 total
-- Mapped to phases: 0
-- Unmapped: 46 ⚠️
+- Mapped to phases: 46
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-11-10*
-*Last updated: 2026-11-10 after initial definition*
+*Last updated: 2026-11-10 after roadmap creation*
