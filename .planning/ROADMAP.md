@@ -30,20 +30,25 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. When an installer or service-wrapping task fails, the Bolt output shows the log tail, failed units and exit code, and a spec that plants fake secrets proves none of them appear in plan output or diagnostics
   2. Operator can run install, backup, restore and migrate against a PE whose environment is not `production`, and a `begin_at_step` value that is not a valid step name fails immediately with the valid names instead of skipping every step
   3. One shared certificate, CRL and key check accepts PEM and DER, RSA and EC and chains, and rejects expired certificates and empty subjects with a clear message; secret-file copies, `/tmp/pe.conf` and token files are written with restrictive modes; readiness waits, including the CA timeout, accept an overridable deadline
-  4. Maintainer can run `rake spec` on current test gems with fixtures pinned to tags, test shell tasks through a stub-PATH harness without a real installer, and see a Puppet 9 CI lane and a credentialed Bolt 5 lane report whether peadm runs unchanged; PE 2026.0 and Puppet 9 fixes (`bootstrap.cfg`, `PKey.read`, `metadata.json` range) are in, and the default PE version in `plans/install.pp` is derived from `data/pe_versions.yaml`
+  4. Maintainer can run `rake spec` on current test gems with fixtures pinned to tags, test shell tasks through a stub-PATH harness without a real installer, and see a Puppet 9 CI lane and a credentialed Bolt 5 lane report whether peadm runs unchanged; PE 2026.0 and Puppet 9 fixes (`bootstrap.cfg`, and `PKey.read` limited to `tasks/code_sync_status.rb` per D-07 with the other RSA-only sites recorded as follow-ups) are in, the `metadata.json` Puppet range widening is a recorded deferred follow-up (user decision), and the default PE version in `plans/install.pp` is derived from `data/pe_versions.yaml`
   5. An acceptance run on a real cluster completes install, an n to n+1 upgrade, and an injected failure followed by resume; Jira tickets exist for P0-1 to P0-3; every change has a ledger entry and every fix a fix-log entry
-**Plans**: 9 plans
+**Plans**: 14 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Toolchain: puppetlabs_spec_helper 9 / rspec-puppet 5, tag-pinned fixtures, Ruby 3.3 floor, Puppet 9 and token-gated Bolt 5 lanes, metadata Puppet 9 range
-- [ ] 01-02-PLAN.md — Stub-PATH shell-task harness and shared redacting failure report (pe_install, code_manager); P0-4/P0-6 checks as specs
-- [ ] 01-03-PLAN.md — Overridable readiness deadlines (task, function, add_replica incl. CA wait, upgrade, convert) with timeout report
-- [ ] 01-04-PLAN.md — Shared certificate/key/CRL checker with structured findings, validate_cert task, EC-safe code_sync_status
-- [ ] 01-05-PLAN.md — Default PE version from data/pe_versions.yaml; begin_at_step validated before any remote call, step-name drift spec
-- [ ] 01-06-PLAN.md — Install path: non-production environment, readiness deadline through install, /tmp/pe.conf 0600 and removed
-- [ ] 01-07-PLAN.md — Backup/restore/restore_ca/migrate in non-production environments; restore deadline; shared CA backend detection
-- [ ] 01-08-PLAN.md — Secret file copies 0600, token file 0600, planted-secret plan-output spec and signed-URL fix
-- [ ] 01-09-PLAN.md — Acceptance slice (U-13) and node checks, real-cluster and CI runs, Jira P0-1..P0-3, ledger and fix-log close-out
+- [ ] 01-01-PLAN.md — Ruby 3.3 floor, part 1: .ruby-version, CLAUDE.md, spec.yml and 9 acceptance workflows; Phase 1 ledger section
+- [ ] 01-02-PLAN.md — Ruby 3.3 floor, part 2: the remaining 13 acceptance workflows
+- [ ] 01-03-PLAN.md — Toolchain: puppetlabs_spec_helper 9 / rspec-puppet 5, tag-pinned fixtures, non-blocking Puppet 9 and token-gated Bolt 5 lanes (metadata widening deferred)
+- [ ] 01-04-PLAN.md — Stub-PATH shell-task harness and shared redacting failure report in pe_install and pe_reinstall; P0-4/P0-6 checks as specs
+- [ ] 01-05-PLAN.md — code_manager fails on API errors with a redacted report; wait for pe-master before the install commit
+- [ ] 01-06-PLAN.md — Overridable readiness deadlines (task, function, add_replica incl. CA wait, upgrade, convert) with timeout report
+- [ ] 01-07-PLAN.md — Shared certificate/key/CRL checker with structured findings, validate_cert task, EC-safe code_sync_status
+- [ ] 01-08-PLAN.md — Default PE version from data/pe_versions.yaml
+- [ ] 01-09-PLAN.md — begin_at_step validated before any remote call; step-name drift spec; Peadm::AddDatabaseSteps
+- [ ] 01-10-PLAN.md — Install path: non-production environment, readiness deadline through install, /tmp/pe.conf 0600 and removed
+- [ ] 01-11-PLAN.md — Backup/restore/restore_ca/migrate in non-production environments; restore deadline; shared CA backend detection
+- [ ] 01-12-PLAN.md — Secret file copies 0600, token file 0600, planted-secret plan-output spec and signed-URL fix
+- [ ] 01-13-PLAN.md — Acceptance slice (U-13) and node checks, real-cluster and CI runs, Jira P0-1..P0-3, results recorded
+- [ ] 01-14-PLAN.md — Contingency fixes from the cluster results; commit hashes and traceability audit
 
 ### Phase 2: Safe Upgrade
 **Goal**: An upgrade of any supported size is checked before anything is touched, can resume at any step, and reports success only when the cluster is verified healthy on the target version
@@ -100,7 +105,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5. Phase 4 does not nee
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations, Diagnostics and Test Baseline | 0/9 | Planned | - |
+| 1. Foundations, Diagnostics and Test Baseline | 0/14 | Planned | - |
 | 2. Safe Upgrade | 0/TBD | Not started | - |
 | 3. Recovery Point and Rollback | 0/TBD | Not started | - |
 | 4. Failover and Node Operations | 0/TBD | Not started | - |

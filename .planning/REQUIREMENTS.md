@@ -14,7 +14,7 @@ Requirements for this release. Each maps to a roadmap phase. Evidence for each i
 - [ ] **FND-03**: Operator gets one shared certificate, CRL and key validation (PEM and DER, RSA and EC, chains, expiry, empty subject) used by peadm tasks and by the CD4PE/SCM plans
 - [ ] **FND-04**: Operator is told immediately when `begin_at_step` is not a valid step name for the plan, instead of every step being skipped
 - [ ] **FND-05**: Operator's secrets never appear in plan output or diagnostics, checked by a spec that plants fake secrets
-- [ ] **FND-06**: Maintainer has secret-file copies and temporary PE config written with restrictive permissions (`copy_file` 0644, `/tmp/pe.conf`, token file mode)
+- [ ] **FND-06**: Maintainer has secret-file copies and temporary PE config written with restrictive permissions, replacing today's world-readable defects: `copy_file` writing every file 0644, `/tmp/pe.conf` left behind, and the RBAC token file following the umask
 - [ ] **FND-07**: Maintainer has readiness waits with overridable deadlines instead of fixed timeouts, including the CA timeout
 
 ### Safe Upgrade
@@ -63,7 +63,7 @@ Requirements for this release. Each maps to a roadmap phase. Evidence for each i
 
 - [ ] **TST-01**: Maintainer runs specs on current test gems (`puppetlabs_spec_helper` 9, `rspec-puppet` 5) with fixtures pinned to tags
 - [ ] **TST-02**: Maintainer knows whether peadm runs unchanged on Bolt 5.2 and Puppet Core 9, with a CI lane for Puppet 9 and a credentialed lane for Bolt 5
-- [ ] **TST-03**: Operator can run peadm on PE 2026.0 and Puppet 9: `bootstrap.cfg` handling, RSA-only key parsing (`PKey.read`) and the Puppet version range in `metadata.json` are fixed
+- [ ] **TST-03**: Operator can run peadm on PE 2026.0 and Puppet 9: `bootstrap.cfg` handling and RSA-only key parsing (`PKey.read`) are fixed. Per D-07 the `PKey.read` fix in Phase 1 is limited to `tasks/code_sync_status.rb`; the other RSA-only sites are recorded follow-ups. Widening the Puppet version range in `metadata.json` is deferred until the Puppet 9 lane is green (user decision during Phase 1 planning)
 - [ ] **TST-04**: Maintainer has a first acceptance slice (install, upgrade n to n+1, injected failure and resume) before upgrade and failover code changes
 - [ ] **TST-05**: Maintainer has a stub-PATH harness so shell tasks can be tested without a real installer
 - [ ] **TST-06**: Maintainer has the default PE version in `plans/install.pp` derived from `data/pe_versions.yaml` so they cannot drift
