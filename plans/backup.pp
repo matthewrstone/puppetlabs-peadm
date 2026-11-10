@@ -56,14 +56,18 @@ plan peadm::backup (
   # CA files next to the new cluster's own CA database. Dump pe-ca ourselves so
   # the files and the database stay a matching pair. When the `config` scope is
   # also backed up it already contains pe-ca, so skip it then. (PE-47558)
+  # Whether the CA is database-backed is decided by the peadm::ca_storage_backend
+  # task, which checks every Puppet Server bootstrap location; peadm::restore
+  # asks the same task.
   if getvar('recovery_opts.ca') and !getvar('recovery_opts.config') {
-# lint:ignore:strict_indent
-    $ca_backend = run_command(@("CMD"/L), $targets).first['stdout'].chomp
-      grep -v '^[[:space:]]*#' /etc/puppetlabs/puppetserver/bootstrap.cfg \
-        | grep -q '^[[:space:]]*puppetlabs.services.ca.database-storage-service/' \
-        && echo database || echo filesystem
-      | CMD
-# lint:endignore
+    $ca_backend_result = run_task('peadm::ca_storage_backend', $targets).first
+    $ca_backend = $ca_backend_result['backend'] ? {
+      undef   => 'unknown',
+      default => $ca_backend_result['backend'],
+    }
+    if $ca_backend == 'unknown' {
+      out::message("WARNING: could not tell whether the CA is database-backed: none of the Puppet Server bootstrap files exists (checked ${join(pick($ca_backend_result['checked'], []), ', ')}). The pe-ca database is not backed up; on a database-backed CA a restore of this backup will not match the CA database.") # lint:ignore:140chars
+    }
   } else {
     $ca_backend = 'not-applicable'
   }

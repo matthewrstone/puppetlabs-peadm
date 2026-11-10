@@ -137,13 +137,16 @@ describe 'peadm::backup' do
     let(:ca_export) { '/opt/puppetlabs/bin/puppetserver ca storage --export' }
     let(:certs_backup) { "/opt/puppetlabs/bin/puppet-backup create --dir=/tmp/pe-backup-1970-01-01T000000Z/ca --scope=certs\n" }
 
-    def run_with_ca_backend(backend)
+    # The peadm::ca_storage_backend task answers; the plan decides what to do with it.
+    # A block runs after the default stubs are in place, to add expectations.
+    def run_with_ca_backend(backend, checked: ['/etc/puppetlabs/puppetserver/bootstrap.cfg'])
       call_log = []
       allow_out_message
+      yield if block_given?
+      allow_task('peadm::ca_storage_backend').always_return({ 'backend' => backend, 'source' => nil, 'checked' => checked })
       allow_any_command.return do |targets:, command:, **|
         call_log << command
-        stdout = command.include?('database-storage-service') ? backend : ''
-        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => stdout }) })
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => '' }) })
       end
       expect(run_plan('peadm::backup', ca_only)).to be_ok
       call_log
@@ -159,6 +162,49 @@ describe 'peadm::backup' do
       call_log = run_with_ca_backend('filesystem')
       expect(call_log).to include(certs_backup)
       expect(call_log).not_to include(ca_export)
+    end
+
+    it 'dumps the pe-ca database of a database-backed CA' do
+      call_log = run_with_ca_backend('database')
+      expect(call_log.grep(%r{pg_dump.*pe-ca\.dump\.d}).length).to eq(1)
+    end
+
+    it 'does not dump pe-ca for a filesystem-backed CA' do
+      call_log = run_with_ca_backend('filesystem')
+      expect(call_log.grep(%r{pe-ca\.dump\.d})).to be_empty
+    end
+
+    # Catches a mutation that treats "could not tell" as database-backed, or that
+    # says nothing: the operator must be told the pe-ca dump was skipped, and
+    # where the plan looked.
+    it 'warns, naming the paths checked, and skips the pe-ca dump when the backend is unknown' do
+      checked = ['/etc/puppetlabs/puppetserver/bootstrap.cfg', '/etc/puppetlabs/puppetserver/services.d/*.cfg']
+      warning = 'WARNING: could not tell whether the CA is database-backed: none of the Puppet Server bootstrap files exists ' \
+                "(checked #{checked.join(', ')}). The pe-ca database is not backed up; on a database-backed CA a restore of this backup will not match the CA database."
+      call_log = run_with_ca_backend('unknown', checked: checked) { expect_out_message.with_params(warning) }
+      expect(call_log.grep(%r{pe-ca\.dump\.d})).to be_empty
+      expect(call_log).not_to include(ca_export)
+      expect(call_log).to include(certs_backup)
+    end
+
+    # The task runs once, before the dump decision, and only when the ca scope is
+    # backed up on its own (the config scope already contains pe-ca).
+    it 'asks the task once' do
+      allow_out_message
+      expect_task('peadm::ca_storage_backend').be_called_times(1).always_return({ 'backend' => 'filesystem', 'checked' => [] })
+      allow_any_command
+      expect(run_plan('peadm::backup', ca_only)).to be_ok
+    end
+
+    it 'does not ask the task when the config scope is backed up too' do
+      allow_out_message
+      expect_task('peadm::ca_storage_backend').not_be_called
+      allow_any_command
+      expect(run_plan('peadm::backup', ca_only.merge('backup' => ca_only['backup'].merge('config' => true)))).to be_ok
+    end
+
+    it 'does not contain the Puppet Server service line itself, the task owns it' do
+      expect(File.read(File.expand_path('../../plans/backup.pp', __dir__))).not_to include('database-storage-service')
     end
   end
 

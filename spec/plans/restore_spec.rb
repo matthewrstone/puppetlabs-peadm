@@ -47,6 +47,10 @@ describe 'peadm::restore' do
   let(:backup_environment_record) { nil }
   let(:primary_pe_conf) { nil }
 
+  # What peadm::ca_storage_backend reports for the primary: database, filesystem or unknown.
+  let(:ca_backend) { 'filesystem' }
+  let(:ca_backend_checked) { ['/etc/puppetlabs/puppetserver/bootstrap.cfg', '/etc/puppetlabs/puppetserver/services.d/*.cfg'] }
+
   let(:cluster) { { 'params' => { 'primary_host' => 'primary', 'primary_postgresql_host' => 'postgres' } } }
 
   # PostgreSQL server major version of the restore target. 17 (PE 2025.11)
@@ -73,6 +77,10 @@ describe 'peadm::restore' do
     allow_task('peadm::puppet_runonce')
     allow_task('peadm::get_psql_version').always_return({ 'version' => psql_version })
     allow_task('peadm::wait_until_service_ready')
+    allow_task('peadm::ca_storage_backend').return do |targets:, **|
+      value = { 'backend' => ca_backend, 'source' => nil, 'checked' => ca_backend_checked }
+      Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: value) })
+    end
     # Two files are read through peadm::read_file: the environment record inside
     # the backup, and the primary's pe.conf. nil content means "no such file".
     allow_task('peadm::read_file').return do |targets:, params:, **|
@@ -247,15 +255,10 @@ describe 'peadm::restore' do
       call_log = []
       allow_any_command.return do |targets:, command:, **|
         call_log << command
-        # The PE-47558 ca-database-restore check (restore.pp) shells out to
-        # probe for a pe-ca dump and a database-backed CA; this fixture's
-        # backup has neither, so report 'skip' to keep this test's existing
-        # scope (puppetdb export/import ordering), not the ca-restore path.
-        if command.include?('pe-ca.dump.d')
-          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => 'skip' }) })
-        else
-          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
-        end
+        # This fixture's CA is filesystem-backed (the default ca_backend above), so the
+        # PE-47558 pe-ca restore path is not taken: this test is about the puppetdb
+        # export/import ordering.
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
       end
       allow_task('peadm::backup_classification')
       allow_task('peadm::transform_classification_groups')
@@ -286,30 +289,97 @@ describe 'peadm::restore' do
     # certificates issued afterwards from the restored CA files (the new
     # primary's host cert) must be synced into the database at the end, or
     # the CA reuses their serials.
-    it 'stops the agent first and syncs the CA into the database on a pe-ca restore', valid_cluster: true do
-      call_log = []
-      allow_any_command.return do |targets:, command:, **|
-        call_log << command
-        stdout = command.include?('pe-ca.dump.d') ? 'restore' : ''
-        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => stdout }) })
+    context 'with a database-backed CA' do
+      let(:ca_backend) { 'database' }
+      let(:dump_check) { 'test -d /input/file/ca/pe-ca.dump.d' }
+      let(:ca_import) { '/opt/puppetlabs/bin/puppetserver ca storage --import' }
+
+      # Runs the migration with every command recorded. The test -d answer is
+      # 0 (dump present) unless dump_present is false.
+      def run_migration(dump_present: true)
+        call_log = []
+        allow_any_command.return do |targets:, command:, **|
+          call_log << command
+          result = if command == dump_check && !dump_present
+                     Bolt::Result.for_command(targets.first, { 'stdout' => '', 'stderr' => '', 'exit_code' => 1 }, 'command', command, [])
+                   else
+                     Bolt::Result.new(targets.first, value: { 'stdout' => '' })
+                   end
+          Bolt::ResultSet.new([result])
+        end
+        allow_task('peadm::backup_classification')
+        allow_task('peadm::transform_classification_groups')
+        allow_task('peadm::restore_classification')
+        allow_task('peadm::rbac_token')
+        expect(run_plan('peadm::restore', migration_params)).to be_ok
+        call_log
       end
-      allow_task('peadm::backup_classification')
-      allow_task('peadm::transform_classification_groups')
-      allow_task('peadm::restore_classification')
-      allow_task('peadm::rbac_token')
 
-      expect(run_plan('peadm::restore', migration_params)).to be_ok
+      it 'stops the agent first and syncs the CA into the database on a pe-ca restore', valid_cluster: true do
+        call_log = run_migration
 
-      ca_import = '/opt/puppetlabs/bin/puppetserver ca storage --import'
-      expect(call_log).to include("systemctl stop puppet.service && systemctl stop pe-puppetserver\n")
-      pe_ca_restore = call_log.index { |c| c.include?('pg_restore') && c.include?('dbname=pe-ca') }
-      drop_pglogical = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP SCHEMA IF EXISTS pglogical CASCADE') }
-      drop_extension = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP EXTENSION IF EXISTS pglogical CASCADE') }
-      expect(pe_ca_restore).not_to be_nil
-      expect(drop_pglogical).to be > pe_ca_restore
-      expect(drop_extension).to be > pe_ca_restore
-      expect(call_log.count(ca_import)).to eq(1)
-      expect(call_log.index(ca_import)).to be > call_log.index("/opt/puppetlabs/bin/puppet-infrastructure configure --no-recover\n")
+        expect(call_log).to include("systemctl stop puppet.service && systemctl stop pe-puppetserver\n")
+        pe_ca_restore = call_log.index { |c| c.include?('pg_restore') && c.include?('dbname=pe-ca') }
+        drop_pglogical = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP SCHEMA IF EXISTS pglogical CASCADE') }
+        drop_extension = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP EXTENSION IF EXISTS pglogical CASCADE') }
+        expect(pe_ca_restore).not_to be_nil
+        expect(drop_pglogical).to be > pe_ca_restore
+        expect(drop_extension).to be > pe_ca_restore
+        expect(call_log.count(ca_import)).to eq(1)
+        expect(call_log.index(ca_import)).to be > call_log.index("/opt/puppetlabs/bin/puppet-infrastructure configure --no-recover\n")
+      end
+
+      # The dump is checked on the primary being restored, and only then is it used.
+      it 'checks that the backup has a pe-ca dump before restoring it', valid_cluster: true do
+        call_log = run_migration
+        expect(call_log).to include(dump_check)
+        expect(call_log.index(dump_check)).to be < call_log.index { |c| c.include?('pg_restore') && c.include?('dbname=pe-ca') }
+      end
+
+      # Catches a mutation that restores pe-ca whenever the CA is database-backed,
+      # even for a backup that never dumped it.
+      it 'does not restore pe-ca when the backup has no dump', valid_cluster: true do
+        call_log = run_migration(dump_present: false)
+        expect(call_log.grep(%r{dbname=pe-ca})).to be_empty
+        expect(call_log).not_to include(ca_import)
+      end
+    end
+
+    # Catches a mutation that restores pe-ca when the CA is not database-backed.
+    context 'with a filesystem-backed CA' do
+      it 'neither checks for nor restores a pe-ca dump', valid_cluster: true do
+        call_log = []
+        allow_any_command.return do |targets:, command:, **|
+          call_log << command
+          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+        end
+        allow_task('peadm::backup_classification')
+        allow_task('peadm::transform_classification_groups')
+        allow_task('peadm::restore_classification')
+        allow_task('peadm::rbac_token')
+        expect(run_plan('peadm::restore', migration_params)).to be_ok
+        expect(call_log.grep(%r{pe-ca})).to be_empty
+      end
+    end
+
+    # "Could not tell" keeps today's behaviour (no pe-ca restore) but says so,
+    # naming where the plan looked, instead of guessing silently.
+    context 'when the CA backend cannot be determined' do
+      let(:ca_backend) { 'unknown' }
+
+      it 'warns, naming the paths checked, and skips the pe-ca restore', valid_cluster: true do
+        warning = 'WARNING: could not tell whether the CA is database-backed: none of the Puppet Server bootstrap files exists on the primary ' \
+                  "(checked #{ca_backend_checked.join(', ')}). The pe-ca database is not restored."
+        allow_any_command
+        allow_task('peadm::backup_classification')
+        allow_task('peadm::transform_classification_groups')
+        allow_task('peadm::restore_classification')
+        allow_task('peadm::rbac_token')
+        expect_out_message.with_params(warning)
+        expect_command(%r{pe-ca}).not_be_called
+
+        expect(run_plan('peadm::restore', migration_params)).to be_ok
+      end
     end
 
     # PE-47009: a permanent failure (wrong console_password) is tagged with
@@ -491,12 +561,10 @@ describe 'peadm::restore' do
     end
 
     it 'restores only ca/certs when recovery_opts.ca is the only flag set', valid_cluster: true do
-      # PE-47558: with ca => true and config => false, restore.pp probes for a
-      # pe-ca dump + database-backed CA before the certs restore. This
-      # fixture's backup has neither, so report 'skip' -- this test covers the
-      # pre-existing ca/code/config isolation, not the new ca-database path.
-      expect_command("test -d /input/file/ca/pe-ca.dump.d   && grep -v '^[[:space:]]*#' /etc/puppetlabs/puppetserver/bootstrap.cfg     | grep -q '^[[:space:]]*puppetlabs.services.ca.database-storage-service/'   && echo restore || echo skip\n")
-        .always_return('stdout' => 'skip')
+      # PE-47558: with ca => true and config => false, restore.pp asks the
+      # peadm::ca_storage_backend task before the certs restore. This fixture's
+      # CA is filesystem-backed (the default above), so there is no pe-ca
+      # restore: this test covers the ca/code/config isolation, not that path.
       expect_command(ca_command)
       expect_command(code_command).not_be_called
       expect_command(config_command).not_be_called
@@ -567,8 +635,7 @@ describe 'peadm::restore' do
       call_log = []
       allow_any_command.return do |targets:, command:, **|
         call_log << command
-        stdout = command.include?('pe-ca.dump.d') ? 'skip' : ''
-        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => stdout }) })
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => '' }) })
       end
       call_log
     end

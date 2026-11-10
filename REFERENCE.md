@@ -71,6 +71,7 @@ before they get overwritten by a classification reassertion
 
 * [`agent_install`](#agent_install): Install the Puppet agent from a master
 * [`backup_classification`](#backup_classification): A task to call the classification api and write to file
+* [`ca_storage_backend`](#ca_storage_backend): Report whether Puppet Server keeps the CA in the pe-ca database or on the filesystem, by checking /etc/puppetlabs/puppetserver/bootstrap.cfg,
 * [`cert_data`](#cert_data): Return certificate data related to the Puppet agent
 * [`cert_valid_status`](#cert_valid_status): Check primary for valid state of a certificate
 * [`check_pe_master_rules`](#check_pe_master_rules): Checks if the PE Master group rules have already been updated to support 'pe_compiler_legacy' as a pp_auth_role
@@ -1285,6 +1286,12 @@ A task to call the classification api and write to file
 Data type: `String`
 
 The directory to write the classification output to. Directory must exist
+
+### <a name="ca_storage_backend"></a>`ca_storage_backend`
+
+Report whether Puppet Server keeps the CA in the pe-ca database or on the filesystem, by checking /etc/puppetlabs/puppetserver/bootstrap.cfg, /etc/puppetlabs/puppetserver/services.d/*.cfg and /opt/puppetlabs/server/apps/puppetserver/config/services.d/*.cfg. Returns backend (database, filesystem or unknown when none of those files exists), the file that matched, and the paths checked.
+
+**Supports noop?** false
 
 ### <a name="cert_data"></a>`cert_data`
 

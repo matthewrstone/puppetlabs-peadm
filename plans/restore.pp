@@ -152,16 +152,28 @@ plan peadm::restore (
   # files (ssl/, puppetserver/ca/ incl. the key passphrase) on disk. If peadm::backup
   # also dumped the pe-ca database, restore it too, so the files and database
   # are a matching pair. Needs the dump in the backup and a database-backed CA
-  # on this primary. (PE-47558)
+  # on this primary, which the peadm::ca_storage_backend task decides (it checks
+  # every Puppet Server bootstrap location, as peadm::backup does). (PE-47558)
   if getvar('recovery_opts.ca') and !getvar('recovery_opts.config') {
-# lint:ignore:strict_indent
-    $ca_restore_check = run_command(@("CMD"/L), $primary_target).first['stdout'].chomp
-      test -d ${shellquote($recovery_directory)}/ca/pe-ca.dump.d \
-        && grep -v '^[[:space:]]*#' /etc/puppetlabs/puppetserver/bootstrap.cfg \
-          | grep -q '^[[:space:]]*puppetlabs.services.ca.database-storage-service/' \
-        && echo restore || echo skip
-      | CMD
-# lint:endignore
+    $ca_backend_result = run_task('peadm::ca_storage_backend', $primary_target).first
+    $ca_backend = $ca_backend_result['backend'] ? {
+      undef   => 'unknown',
+      default => $ca_backend_result['backend'],
+    }
+    if $ca_backend == 'unknown' {
+      out::message("WARNING: could not tell whether the CA is database-backed: none of the Puppet Server bootstrap files exists on the primary (checked ${join(pick($ca_backend_result['checked'], []), ', ')}). The pe-ca database is not restored.") # lint:ignore:140chars
+    }
+    if $ca_backend == 'database' {
+      $ca_dump_check = run_command("test -d ${shellquote($recovery_directory)}/ca/pe-ca.dump.d", $primary_target,
+        _catch_errors => true
+      )
+      $ca_restore_check = $ca_dump_check.ok ? {
+        true    => 'restore',
+        default => 'skip',
+      }
+    } else {
+      $ca_restore_check = 'skip'
+    }
   } else {
     $ca_restore_check = 'skip'
   }
