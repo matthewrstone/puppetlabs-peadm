@@ -51,7 +51,9 @@ group :development do
   gem "rubocop-factory_bot", '~> 2.27.1',        require: false
   gem "rubocop-capybara", '~> 2.22.1',           require: false
   gem "rb-readline", '= 0.5.5',                  require: false, platforms: [:mswin, :mingw, :x64_mingw]
-  gem "bolt", '>= 4.0.0',                        require: false
+  # BOLT_GEM_VERSION is set by the Bolt5Puppet9 job in .github/workflows/spec.yml; it moves
+  # bolt to the puppetcore source block below so Bolt 5 resolves there.
+  gem "bolt", '>= 4.0.0',                        require: false unless ENV['BOLT_GEM_VERSION']
   gem "github_changelog_generator", '1.16.4',    require: false
   gem "octokit", '4.21.0',                       require: false
   gem "orchestrator_client", '< 0.7.1',          require: false
@@ -77,6 +79,7 @@ gems['puppet'] = location_for(puppet_version)
 # variables
 gems['facter'] = location_for(facter_version) if facter_version
 gems['hiera'] = location_for(hiera_version) if hiera_version
+gems['bolt'] = location_for(ENV['BOLT_GEM_VERSION']) if ENV['BOLT_GEM_VERSION']
 
 # When PUPPET_FORGE_TOKEN is set, resolve puppet/facter/hiera from the private
 # puppetcore gem source instead of rubygems.org. This is how pre-release builds
