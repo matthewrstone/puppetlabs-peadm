@@ -47,7 +47,7 @@ primary_host vs replica_host) the node was passed as.
 * [`peadm::recovery_opts_all`](#peadm--recovery_opts_all)
 * [`peadm::recovery_opts_default`](#peadm--recovery_opts_default)
 * [`peadm::sanitize_log_text`](#peadm--sanitize_log_text): Makes arbitrary external text safe to interpolate into a single log line.
-* [`peadm::supported_pe_versions`](#peadm--supported_pe_versions): Returns the range of PE versions this release of peadm supports, from data/pe_versions.yaml, as a Hash with 'oldest' and 'newest' keys.
+* [`peadm::supported_pe_versions`](#peadm--supported_pe_versions): Returns the supported PE version range and the install default from data/pe_versions.yaml, as a Hash with 'oldest', 'newest' and 'default' ke
 * [`peadm::update_pe_conf`](#peadm--update_pe_conf): Update the pe.conf file on a target with the provided hash
 * [`peadm::wait_until_service_ready`](#peadm--wait_until_service_ready): A convenience function to help remember port numbers for services and handle running the wait_until_service_ready task
 * [`peadm::warn_group_rules_overwrite`](#peadm--warn_group_rules_overwrite): Fetch and log the PE Infrastructure Agent group's current rules
@@ -1032,15 +1032,15 @@ Maximum length of the returned string.
 
 Type: Ruby 4.x API
 
-Returns the range of PE versions this release of peadm supports, from
-data/pe_versions.yaml, as a Hash with 'oldest' and 'newest' keys.
+Returns the supported PE version range and the install default from
+data/pe_versions.yaml, as a Hash with 'oldest', 'newest' and 'default' keys.
 
 #### `peadm::supported_pe_versions()`
 
-Returns the range of PE versions this release of peadm supports, from
-data/pe_versions.yaml, as a Hash with 'oldest' and 'newest' keys.
+Returns the supported PE version range and the install default from
+data/pe_versions.yaml, as a Hash with 'oldest', 'newest' and 'default' keys.
 
-Returns: `Struct[{oldest => String, newest => String}]`
+Returns: `Struct[{oldest => String, newest => String, "default" => String}]`
 
 ### <a name="peadm--update_pe_conf"></a>`peadm::update_pe_conf`
 
@@ -2474,6 +2474,7 @@ The following parameters are available in the `peadm::install` plan:
 * [`compiler_pool_address`](#-peadm--install--compiler_pool_address)
 * [`internal_compiler_a_pool_address`](#-peadm--install--internal_compiler_a_pool_address)
 * [`internal_compiler_b_pool_address`](#-peadm--install--internal_compiler_b_pool_address)
+* [`version`](#-peadm--install--version)
 * [`pe_installer_source`](#-peadm--install--pe_installer_source)
 * [`ldap_config`](#-peadm--install--ldap_config)
 * [`final_agent_state`](#-peadm--install--final_agent_state)
@@ -2487,7 +2488,6 @@ The following parameters are available in the `peadm::install` plan:
 * [`primary_postgresql_host`](#-peadm--install--primary_postgresql_host)
 * [`replica_postgresql_host`](#-peadm--install--replica_postgresql_host)
 * [`console_password`](#-peadm--install--console_password)
-* [`version`](#-peadm--install--version)
 * [`dns_alt_names`](#-peadm--install--dns_alt_names)
 * [`pe_conf_data`](#-peadm--install--pe_conf_data)
 * [`code_manager_auto_configure`](#-peadm--install--code_manager_auto_configure)
@@ -2530,6 +2530,16 @@ compilers. This is used for DR configuration in large and extra large
 architectures.
 
 Default value: `undef`
+
+##### <a name="-peadm--install--version"></a>`version`
+
+Data type: `Peadm::Pe_version`
+
+The PE version to install. Defaults to the `default` key in
+data/pe_versions.yaml (via peadm::supported_pe_versions), which is
+checked to lie inside the supported range.
+
+Default value: `peadm::supported_pe_versions()['default']`
 
 ##### <a name="-peadm--install--pe_installer_source"></a>`pe_installer_source`
 
@@ -2646,14 +2656,6 @@ Default value: `undef`
 Data type: `String`
 
 
-
-##### <a name="-peadm--install--version"></a>`version`
-
-Data type: `Peadm::Pe_version`
-
-
-
-Default value: `'2025.12.1'`
 
 ##### <a name="-peadm--install--dns_alt_names"></a>`dns_alt_names`
 

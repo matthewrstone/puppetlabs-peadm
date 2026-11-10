@@ -11,6 +11,10 @@
 #   A load balancer address directing traffic to any of the "B" pool
 #   compilers. This is used for DR configuration in large and extra large
 #   architectures.
+# @param version
+#   The PE version to install. Defaults to the `default` key in
+#   data/pe_versions.yaml (via peadm::supported_pe_versions), which is
+#   checked to lie inside the supported range.
 # @param pe_installer_source
 #   The URL to download the Puppet Enterprise installer media from. If not
 #   specified, PEAdm will attempt to download PE installation media from its
@@ -58,7 +62,7 @@ plan peadm::install (
 
   # Common Configuration
   String                            $console_password,
-  Peadm::Pe_version                 $version                          = '2025.12.1',
+  Peadm::Pe_version                 $version                          = peadm::supported_pe_versions()['default'],
   Optional[Stdlib::HTTPSUrl]        $pe_installer_source              = undef,
   Optional[Array[String]]           $dns_alt_names                    = undef,
   Optional[String]                  $compiler_pool_address            = undef,
