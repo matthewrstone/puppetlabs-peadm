@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Foundations, Diagnostics and Test Baseline
 status: executing
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-11-10T21:41:07.525Z"
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-11-10T22:06:39.553Z"
 last_activity: 2026-11-10
 last_activity_desc: Phase 01 execution started
-state_head: 825cc01556d649eaab245d3920b2e3c536dcdb60
+state_head: "0b5614eb3d22e1a4d2b3c9d810e6b72e49898ad6"
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-11-10)
 ## Current Position
 
 Phase: 01 (Foundations, Diagnostics and Test Baseline) — EXECUTING
-Plan: 10 of 14
+Plan: 11 of 14
 Status: Ready to execute
 Last activity: 2026-11-10 — Phase 01 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P07 | 40 min | 3 tasks | 12 files |
 | Phase 01 P08 | 8 min | 1 tasks | 7 files |
 | Phase 01 P09 | 13 min | 2 tasks | 11 files |
+| Phase 01 P10 | 25 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-07: Tasks that use files/cert_check.rb load it with require_relative '../files/cert_check' and list peadm/files/cert_check.rb in their JSON files; 15 RSA-only host-key sites remain as ledger follow-ups (D-07)
 - [Phase 01]: [01-08] Struct key for the install default is quoted ("default") because default is a Puppet reserved word
 - [Phase 01]: Plan 01-09: node_group_environment is Optional (undef) and resolved in the plan body, so begin_at_step type errors fire before any remote call
+- [Phase 01]: 01-10: PE environment resolved once in peadm::install from pe_conf_data (Peadm::Pe_environment validated) and passed to install and configure subplans
+- [Phase 01]: 01-10: init_db_server stays public (documented operator plan); /tmp/pe.conf removed after installers on success and failure via catch_errors + fail_plan(Error)
 
 ### Pending Todos
 
@@ -118,6 +121,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-10T21:41:07.252Z
-Stopped at: Completed 01-09-PLAN.md
+Last session: 2026-11-10T22:06:39.268Z
+Stopped at: Completed 01-10-PLAN.md
 Resume file: None
