@@ -1647,6 +1647,18 @@ Data type: `Optional[Enum['stopped']]`
 
 If 'stopped', ensure the Puppet agent is not running when install completes
 
+##### `report_log_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of the newest installer log to show if the installer fails. Defaults to 40
+
+##### `report_unit_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of systemctl status to show for each failed pe-* service if the installer fails. Defaults to 15
+
 ### <a name="pe_uninstall"></a>`pe_uninstall`
 
 Uninstall Puppet Enterprise
