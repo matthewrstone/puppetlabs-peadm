@@ -7,6 +7,7 @@
     }
   },
   "input_method": "environment",
+  "files": ["peadm/files/failure_report.sh"],
   "implementations": [
     {"name": "code_manager.sh"}
   ]

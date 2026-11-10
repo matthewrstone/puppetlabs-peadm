@@ -99,6 +99,14 @@ points to the acceptance scenario in [test-scenarios.md](test-scenarios.md).
 - **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/pe_install_spec.rb spec/unit/shell_tasks/pe_reinstall_spec.rb` passes. It builds a real tarball with a fake installer, stubs `systemctl`, and asserts the planted values never reach stdout or stderr.
 - **Scenario:** U-01. **Status:** spec shows it. Not run against a real installer failure.
 
+### P1-07 `peadm::code_manager` reported success when the file-sync API call failed
+
+- **Complaint:** found in research (no ticket filed). `code_manager` ran `curl` and threw away its exit code and the HTTP status, so `file-sync commit` returned success even when puppetserver answered HTTP 500 or refused the connection. The install subplan then carried on and DR provisioning failed later with nothing pointing back at the commit.
+- **Fix:** the P1-07 commit. `curl_wrapper` now fails the task on a curl error or a non-2xx status and prints the method, URL path, curl exit code, HTTP code, the response body (redacted) and any failed `pe-*` units. Fixes it. Not run on a cluster.
+- **Reproduce (before):** run the spec below on the parent of the P1-07 commit with the new spec copied in. The HTTP 500 example `exits non-zero` fails because the old script exits 0 (8 of 18 examples fail there).
+- **Demonstrate (after):** `bundle exec rspec spec/unit/shell_tasks/code_manager_spec.rb` passes. The stub `curl` answers HTTP 500 with `{"error":"FAKE"}` and the task exits non-zero naming `POST /file-sync/v1/commit` and `HTTP 500`; a planted `"token":"FAKE-SECRET-tok"` never reaches the output.
+- **Scenario:** I-01. **Status:** spec shows it, not run on a cluster. The failing-first run on the unmodified script (8 of 18 examples fail) was done while making the fix.
+
 ## Template
 
 ```markdown

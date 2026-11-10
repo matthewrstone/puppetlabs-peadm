@@ -1,4 +1,7 @@
 #!/bin/bash
+# Output stays plain text (this task does not source task_helper.sh); Bolt
+# wraps it in _output itself. The helper below only defines functions.
+source "$(dirname $0)/../../peadm/files/failure_report.sh"
 
 function main()
 {
@@ -61,10 +64,13 @@ function main()
       ;;
   esac
 
-  g_certname=$(/opt/puppetlabs/bin/puppet config print certname --section agent)
+  # PEADM_PUPPET_BIN is a test seam; production always uses the default.
+  g_certname=$("${PEADM_PUPPET_BIN:-/opt/puppetlabs/bin/puppet}" config print certname --section agent)
 
   shift
   $action "$@"
+  # Every action's failure is the task's failure (P1-07).
+  return $?
 }
 
 function deploy()
@@ -79,7 +85,8 @@ function commit()
   # Second, force a sync/deploy to the code directory. The second step is
   # performed explicitly so that we are guaranteed the deploy is finished
   # before we take any action that depends on that task being done.
-  fs_commit
+  # A failed commit must not be masked by a successful force-sync.
+  fs_commit || return 1
   fs_force_sync
 }
 
@@ -151,17 +158,48 @@ function flush_environment_cache()
     'https://localhost:8140/puppet-admin-api/v1/environment-cache'
 }
 
+# Run curl and fail on a curl error or a non-2xx HTTP status (P1-07). The body
+# goes to a temp file so the HTTP code can be read from curl's -w output; on
+# failure it is printed through peadm_redact, because an API response can echo
+# tokens or paths and Bolt prints task output unredacted.
 function curl_wrapper()
 {
+  local method='GET' url prev='' arg body_file http_code exitcode
+  for arg in "$@"; do
+    [ "$prev" = '--request' ] && method="$arg"
+    url="$arg"
+    prev="$arg"
+  done
+  url="${url#*://*/}"
+
   [ "$g_verbose" = 'true' ] && echo "command: curl $@"
-  output=$(curl "$@")
+  body_file=$(mktemp)
+  http_code=$(curl "$@" -o "$body_file" -w '%{http_code}')
   exitcode=$?
+
   if [ "$g_verbose" = 'true' ]; then
     echo "output json:"
-    echo "$output" | python -m json.tool || echo "raw output: $output"
+    python -m json.tool < "$body_file" || echo "raw output: $(cat "$body_file")"
     echo "exitcode: $exitcode"
     echo
   fi
+
+  if [ "$exitcode" -ne 0 ] || [[ ! "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+    echo
+    echo "code_manager: ${method} /${url} failed (curl exit ${exitcode}, HTTP ${http_code:-none})"
+    if [ -s "$body_file" ]; then
+      echo "--- Response body"
+      peadm_redact < "$body_file"
+      echo
+    fi
+    peadm_report_failed_units
+    rm -f "$body_file"
+    return 1
+  fi
+
+  rm -f "$body_file"
+  return 0
 }
 
 main $PT_action
+exit $?
