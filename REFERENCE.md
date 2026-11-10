@@ -2303,6 +2303,7 @@ The following parameters are available in the `peadm::convert` plan:
 
 * [`begin_at_step`](#-peadm--convert--begin_at_step)
 * [`node_group_environment`](#-peadm--convert--node_group_environment)
+* [`service_ready_timeout`](#-peadm--convert--service_ready_timeout)
 * [`primary_host`](#-peadm--convert--primary_host)
 * [`replica_host`](#-peadm--convert--replica_host)
 * [`compiler_hosts`](#-peadm--convert--compiler_hosts)
@@ -2329,6 +2330,15 @@ Data type: `String[1]`
 environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
 
 Default value: `peadm::get_node_group_environment($primary_host)`
+
+##### <a name="-peadm--convert--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait may take before it fails with a report. Default 60.
+The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
+
+Default value: `60`
 
 ##### <a name="-peadm--convert--primary_host"></a>`primary_host`
 
@@ -3035,6 +3045,7 @@ The following parameters are available in the `peadm::upgrade` plan:
 * [`uploaddir`](#-peadm--upgrade--uploaddir)
 * [`begin_at_step`](#-peadm--upgrade--begin_at_step)
 * [`node_group_environment`](#-peadm--upgrade--node_group_environment)
+* [`service_ready_timeout`](#-peadm--upgrade--service_ready_timeout)
 * [`primary_host`](#-peadm--upgrade--primary_host)
 * [`replica_host`](#-peadm--upgrade--replica_host)
 * [`compiler_hosts`](#-peadm--upgrade--compiler_hosts)
@@ -3138,6 +3149,15 @@ Data type: `String[1]`
 environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
 
 Default value: `peadm::get_node_group_environment($primary_host)`
+
+##### <a name="-peadm--upgrade--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait may take before it fails with a report. Default 60.
+The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
+
+Default value: `60`
 
 ##### <a name="-peadm--upgrade--primary_host"></a>`primary_host`
 

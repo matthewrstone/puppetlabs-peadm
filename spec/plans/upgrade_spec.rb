@@ -78,6 +78,53 @@ describe 'peadm::upgrade' do
                     'version' => '2021.7.9')).to be_ok
   end
 
+  # FND-07: service_ready_timeout reaches every readiness wait. The orchestrator waits only
+  # run when a node uses the pcp transport (never the primary), so the compiler is pcp here.
+  context 'with a pcp-transport compiler' do
+    def run_upgrade_with_pcp_compiler(extra_params = {})
+      allow_standard_non_returning_calls
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::read_file')
+        .with_params('path' => '/opt/puppetlabs/server/pe_build')
+        .always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').always_return({ 'content' => '{}' })
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary,
+                                                         'pcp://compiler' => trusted_compiler).be_called_times(1)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check).be_called_times(1)
+      run_plan('peadm::upgrade',
+               { 'primary_host' => 'primary', 'compiler_hosts' => 'pcp://compiler', 'version' => '2021.7.9' }.merge(extra_params))
+    end
+
+    def expect_orchestrator_waits(timeout)
+      # bolt-spec with_params is strict equality: service, port and timeout.
+      # Catches a mutation that drops the deadline from one of the waits.
+      expect_task('peadm::wait_until_service_ready')
+        .with_params({ 'service' => 'orchestrator-service', 'port' => '8143', 'timeout' => timeout })
+        .with_targets('primary')
+        .always_return({})
+        .be_called_times(2) # one in upgrade-primary, one in modify-infra-certs
+    end
+
+    it 'passes service_ready_timeout to every orchestrator readiness wait' do
+      expect_orchestrator_waits(240)
+      expect(run_upgrade_with_pcp_compiler('service_ready_timeout' => 240)).to be_ok
+    end
+
+    it 'defaults the readiness deadline to 60 seconds' do
+      expect_orchestrator_waits(60)
+      expect(run_upgrade_with_pcp_compiler).to be_ok
+    end
+  end
+
+  # BoltSpec does not expose wait_time, so check the plan source: the PCP reconnect waits keep
+  # today's 120 s floor and grow with the operator's deadline.
+  it 'extends every wait_until_available call with the larger of 120 s and service_ready_timeout' do
+    source = File.read(File.expand_path('../../plans/upgrade.pp', __dir__))
+    calls = source.scan(%r{wait_until_available\([^)]*\)})
+    expect(calls.length).to be >= 2
+    expect(calls).to all(include('wait_time => max(120, $service_ready_timeout)'))
+  end
+
   it 'fails with a targeted error if pe_installer_source has a malformed tarball name' do
     allow_standard_non_returning_calls
 

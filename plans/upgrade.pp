@@ -33,6 +33,8 @@
 # @param begin_at_step The step where the plan should start. If not set, it will start at the beginning
 #
 # @param node_group_environment environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+# @param service_ready_timeout Seconds each service readiness wait may take before it fails with a report. Default 60.
+#   The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
 #
 plan peadm::upgrade (
   # Standard
@@ -61,6 +63,7 @@ plan peadm::upgrade (
   Enum['running', 'stopped'] $final_agent_state      = 'running',
   Peadm::Download_mode       $download_mode          = 'bolthost',
   Boolean                    $permit_unsafe_versions = false,
+  Integer[1]                 $service_ready_timeout  = 60,
 
   Optional[Peadm::UpgradeSteps] $begin_at_step = undef,
   String[1] $node_group_environment = peadm::get_node_group_environment($primary_host),
@@ -330,8 +333,11 @@ plan peadm::upgrade (
 
     # If in use, wait until orchestrator service is healthy to proceed
     if $all_targets.any |$target| { $target.protocol == 'pcp' } {
-      peadm::wait_until_service_ready('orchestrator-service', $primary_target)
-      wait_until_available($all_targets, wait_time => 120)
+      # The PCP reconnect wait keeps today's 120 s floor because the default
+      # service_ready_timeout (60) is shorter; operators raise both waits with
+      # the one parameter.
+      peadm::wait_until_service_ready('orchestrator-service', $primary_target, $service_ready_timeout)
+      wait_until_available($all_targets, wait_time => max(120, $service_ready_timeout))
     }
 
     # Installer-driven upgrade will de-configure auth access for compilers.
@@ -376,8 +382,11 @@ plan peadm::upgrade (
     # The primary could restart orchestration services again, in which case we
     # would have to wait for nodes to reconnect
     if $all_targets.any |$target| { $target.protocol == 'pcp' } {
-      peadm::wait_until_service_ready('orchestrator-service', $primary_target)
-      wait_until_available($all_targets, wait_time => 120)
+      # The PCP reconnect wait keeps today's 120 s floor because the default
+      # service_ready_timeout (60) is shorter; operators raise both waits with
+      # the one parameter.
+      peadm::wait_until_service_ready('orchestrator-service', $primary_target, $service_ready_timeout)
+      wait_until_available($all_targets, wait_time => max(120, $service_ready_timeout))
     }
 
     # If necessary, add missing cert extensions to compilers
