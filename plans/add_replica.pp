@@ -8,6 +8,7 @@
 #   Can be a separate host in an XL architecture, or undef in Standard or Large.
 # @param token_file - (optional) the token file in a different location than the default.
 # @param node_group_environment environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+# @param service_ready_timeout Seconds each service readiness wait may take before it fails with a report. Default 60.
 plan peadm::add_replica(
   # Standard or Large
   Peadm::SingleTargetSpec           $primary_host,
@@ -19,6 +20,7 @@ plan peadm::add_replica(
   # Common Configuration
   Optional[String] $token_file = undef,
   String[1] $node_group_environment = peadm::get_node_group_environment($primary_host),
+  Integer[1] $service_ready_timeout = 60,
 ) {
   $primary_target             = peadm::get_targets($primary_host, 1)
   $replica_target             = peadm::get_targets($replica_host, 1)
@@ -137,8 +139,8 @@ plan peadm::add_replica(
   # failure on every one of 3 full re-provision attempts, not just an
   # occasional one -- so retrying the atomic call doesn't help. Splitting
   # the call lets peadm poll for readiness itself via
-  # peadm::wait_until_service_ready, which allows up to 60s, before telling
-  # PE core to enable the replica.
+  # peadm::wait_until_service_ready, which allows up to service_ready_timeout
+  # seconds (default 60), before telling PE core to enable the replica.
   $provision_replica_max_attempts = 3
   $provision_result = range(1, $provision_replica_max_attempts).reduce(undef) |$memo, $attempt| {
     $prior_output = ($memo =~ NotUndef and !$memo.ok and $memo.error_set.first.value =~ Hash) ? {
@@ -200,7 +202,7 @@ plan peadm::add_replica(
 
   # Give the replica's Classifier/RBAC/PuppetDB real time to come up before
   # asking PE core to enable it -- see comment above the retry loop.
-  peadm::wait_until_service_ready('pe-master', $replica_target)
+  peadm::wait_until_service_ready('pe-master', $replica_target, $service_ready_timeout)
 
   $enable_replica_max_attempts = 3
   $enable_result = range(1, $enable_replica_max_attempts).reduce(undef) |$memo, $attempt| {

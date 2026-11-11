@@ -11,6 +11,10 @@
 #   A load balancer address directing traffic to any of the "B" pool
 #   compilers. This is used for DR configuration in large and extra large
 #   architectures.
+# @param version
+#   The PE version to install. Defaults to the `default` key in
+#   data/pe_versions.yaml (via peadm::supported_pe_versions), which is
+#   checked to lie inside the supported range.
 # @param pe_installer_source
 #   The URL to download the Puppet Enterprise installer media from. If not
 #   specified, PEAdm will attempt to download PE installation media from its
@@ -39,6 +43,10 @@
 #   that compilers can reach PuppetDB's external database. Leave unset for
 #   the default on-prem topology where Postgres runs on the primary or on a
 #   managed external Postgres target.
+# @param service_ready_timeout
+#   Seconds each service readiness wait during the install and configure steps
+#   may take before it fails with a report. Raise it for slow nodes. Defaults
+#   to 60.
 #
 plan peadm::install (
   # Standard
@@ -58,7 +66,7 @@ plan peadm::install (
 
   # Common Configuration
   String                            $console_password,
-  Peadm::Pe_version                 $version                          = '2025.12.1',
+  Peadm::Pe_version                 $version                          = peadm::supported_pe_versions()['default'],
   Optional[Stdlib::HTTPSUrl]        $pe_installer_source              = undef,
   Optional[Array[String]]           $dns_alt_names                    = undef,
   Optional[String]                  $compiler_pool_address            = undef,
@@ -86,6 +94,7 @@ plan peadm::install (
   Peadm::Download_mode       $download_mode          = 'bolthost',
   Boolean                    $permit_unsafe_versions = false,
   String                     $token_lifetime         = '1y',
+  Integer[1]                 $service_ready_timeout  = 60,
 ) {
   # Log parameters for debugging 
   peadm::log_plan_parameters({
@@ -101,6 +110,14 @@ plan peadm::install (
   peadm::assert_supported_bolt_version()
 
   peadm::assert_supported_pe_version($version, $permit_unsafe_versions)
+
+  # Resolve the environment PE will classify its node groups into, once, from
+  # the same two pe.conf keys PE reads. A bad name, or two keys that disagree,
+  # fails here, before anything is installed.
+  $node_group_environment = peadm::get_node_group_environment($pe_conf_data ? {
+      undef   => {},
+      default => $pe_conf_data,
+  })
 
   $install_result = run_plan('peadm::subplans::install',
     # Standard
@@ -121,6 +138,7 @@ plan peadm::install (
     console_password               => $console_password,
     dns_alt_names                  => $dns_alt_names,
     pe_conf_data                   => $pe_conf_data,
+    node_group_environment         => $node_group_environment,
 
     # Code Manager
     code_manager_auto_configure => $code_manager_auto_configure,
@@ -139,6 +157,7 @@ plan peadm::install (
     download_mode                  => $download_mode,
     permit_unsafe_versions         => $permit_unsafe_versions,
     token_lifetime                 => $token_lifetime,
+    service_ready_timeout          => $service_ready_timeout,
   )
 
   $configure_result = run_plan('peadm::subplans::configure',
@@ -167,6 +186,8 @@ plan peadm::install (
     # Other
     stagingdir                       => $stagingdir,
     final_agent_state                => $final_agent_state,
+    node_group_environment           => $node_group_environment,
+    service_ready_timeout            => $service_ready_timeout,
   )
 
   # Return a string banner reporting on what was done

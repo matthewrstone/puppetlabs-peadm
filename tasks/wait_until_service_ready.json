@@ -1,5 +1,5 @@
 {
-  "description": "Return when the orchestrator service is healthy, or timeout after 15 seconds",
+  "description": "Return when the named PE service answers healthy on its status API, or fail after the timeout (default 60 seconds) with a report of what was awaited, the last HTTP result, failed pe-* units and the redacted service log tail",
   "parameters": {
     "service": {
       "type": "Enum[all, ca, pe-master, orchestrator-service]",
@@ -8,8 +8,17 @@
     "port": {
       "type": "Enum['8140', '8143']",
       "description": "Which port to query the status API on"
+    },
+    "timeout": {
+      "type": "Optional[Integer[1]]",
+      "description": "Seconds to keep waiting before failing. Defaults to 60."
+    },
+    "interval": {
+      "type": "Optional[Integer[1]]",
+      "description": "Seconds to sleep between attempts. Defaults to 3."
     }
   },
+  "files": ["peadm/files/failure_report.sh"],
   "implementations": [
     {"name": "wait_until_service_ready.sh", "input_method": "environment"}
   ]

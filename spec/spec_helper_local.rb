@@ -6,6 +6,9 @@ require 'bolt_spec/plans'
 # Configure Puppet and Bolt for testing
 BoltSpec::Plans.init
 
+# Harness for running shell tasks against stub executables (spec/unit/shell_tasks)
+require_relative 'support/shell_task_harness'
+
 # This environment variable can be read by Ruby Bolt tasks to prevent unwanted
 # auto-execution, enabling easy unit testing.
 ENV['RSPEC_UNIT_TEST_MODE'] ||= 'TRUE'
@@ -14,8 +17,10 @@ if defined?(SimpleCov)
   # puppetlabs_spec_helper's built-in SimpleCov setup (SIMPLECOV=yes) already
   # tracks lib/**/*.rb (including lib/puppet/functions/peadm/*.rb) by default,
   # but not tasks/*.rb, so task files never show up even as an explicit 0%
-  # gap. Widen the glob to add tasks/*.rb to what's already covered.
-  SimpleCov.track_files('{lib/**/*.rb,tasks/*.rb}')
+  # gap. Widen the glob to add tasks/*.rb to what's already covered, and
+  # files/*.rb (P1-10) so the shared PeadmCertCheck module counts toward the
+  # floor below.
+  SimpleCov.track_files('{lib/**/*.rb,tasks/*.rb,files/*.rb}')
 
   # PE-45737: raised from no floor to a real enforced minimum, once that
   # ticket's test-writing gave the number something real to hold at --

@@ -9,5 +9,6 @@
       "default": ["all"]
     }
   },
-  "input_method": "stdin"
+  "input_method": "stdin",
+  "files": ["peadm/files/cert_check.rb"]
 }

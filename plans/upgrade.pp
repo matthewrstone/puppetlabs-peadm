@@ -32,7 +32,9 @@
 #   for offline usage.
 # @param begin_at_step The step where the plan should start. If not set, it will start at the beginning
 #
-# @param node_group_environment environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+# @param node_group_environment environment for the PEADM specific node groups, if not set it is read from the primary's pe.conf, or production
+# @param service_ready_timeout Seconds each service readiness wait may take before it fails with a report. Default 60.
+#   The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
 #
 plan peadm::upgrade (
   # Standard
@@ -61,10 +63,18 @@ plan peadm::upgrade (
   Enum['running', 'stopped'] $final_agent_state      = 'running',
   Peadm::Download_mode       $download_mode          = 'bolthost',
   Boolean                    $permit_unsafe_versions = false,
+  Integer[1]                 $service_ready_timeout  = 60,
 
   Optional[Peadm::UpgradeSteps] $begin_at_step = undef,
-  String[1] $node_group_environment = peadm::get_node_group_environment($primary_host),
+  Optional[String[1]] $node_group_environment = undef,
 ) {
+  # Resolved here, after parameter validation, so that an invalid begin_at_step
+  # fails on its type before anything contacts the primary.
+  $resolved_node_group_environment = $node_group_environment ? {
+    undef   => peadm::get_node_group_environment($primary_host),
+    default => $node_group_environment,
+  }
+
   # Log parameters for debugging
   peadm::log_plan_parameters({
     'primary_host' => $primary_host,
@@ -72,14 +82,15 @@ plan peadm::upgrade (
     'compiler_hosts' => $compiler_hosts,
     'primary_postgresql_host' => $primary_postgresql_host,
     'replica_postgresql_host' => $replica_postgresql_host,
-    'node_group_environment' => $node_group_environment,
+    'node_group_environment' => $resolved_node_group_environment,
     'version' => $version,
-    # Log only the tarball basename, not the full URL: pe_installer_source may
+    # Log only the tarball name, not the full URL: pe_installer_source may
     # carry credentials or signed tokens (e.g. S3 pre-signed URLs) that
-    # shouldn't land in Bolt output or centralized logs.
+    # shouldn't land in Bolt output or centralized logs. The name is taken
+    # without the query string, which is where the signature lives.
     'pe_installer_source' => $pe_installer_source ? {
       undef   => undef,
-      default => $pe_installer_source.split('/')[-1],
+      default => peadm::installer_tarball_name($pe_installer_source),
     },
   })
 
@@ -141,7 +152,7 @@ plan peadm::upgrade (
   $platform = run_task('peadm::precheck', $primary_target).first['platform']
 
   if $pe_installer_source {
-    $pe_tarball_name   = $pe_installer_source.split('/')[-1]
+    $pe_tarball_name   = peadm::installer_tarball_name($pe_installer_source)
     $pe_tarball_source = $pe_installer_source
     $_version          = $pe_tarball_name.split('-')[2]
   } else {
@@ -158,7 +169,12 @@ plan peadm::upgrade (
 
   $rules_check = run_task('peadm::check_pe_master_rules', $primary_target).first.value
   unless $rules_check['updated'] {
-    fail_plan('Please run the Convert plan to convert your Puppet infrastructure to be managed by this version of PEADM.')
+# lint:ignore:strict_indent
+    fail_plan(@("HEREDOC"/L))
+      Please run the Convert plan to convert your Puppet infrastructure to be \
+      managed by this version of PEADM. Reason: ${rules_check['message']}
+      | HEREDOC
+# lint:endignore
   }
 
   # Gather certificate extension information from all systems
@@ -174,6 +190,23 @@ plan peadm::upgrade (
   $current_pe_version = run_task('peadm::read_file', $primary_target,
     path => '/opt/puppetlabs/server/pe_build',
   ).first['content']
+
+  # The PE installer refuses to move to an older version (or one released
+  # before the installed one), so fail early rather than partway through the
+  # upgrade, after services on the primary have already been stopped.
+  $installed_pe_version = $current_pe_version ? {
+    String  => $current_pe_version.strip,
+    default => undef,
+  }
+  if $installed_pe_version =~ Peadm::Pe_version and $_version =~ SemVerRange("< ${installed_pe_version}") {
+# lint:ignore:strict_indent
+    fail_plan(@("DOWNGRADE"/L))
+      Requested PE version ${_version} is older than the installed version \
+      ${installed_pe_version}. The PE installer does not support downgrades. To \
+      return to an earlier version, restore from a backup taken before the upgrade.
+      | DOWNGRADE
+# lint:endignore
+  }
 
   # Ensure needed trusted facts are available
   if $cert_extensions.any |$_,$cert| {
@@ -214,6 +247,13 @@ plan peadm::upgrade (
     == 'pe_compiler')
   }
 
+  # A resumed run skips the preparation step below, which is where Puppet is
+  # stopped on the infrastructure nodes. Make sure it is still stopped, so an
+  # agent run can't interfere with the remaining steps.
+  if $begin_at_step and $begin_at_step != 'preparation' {
+    run_command('systemctl stop puppet', $all_targets)
+  }
+
   peadm::plan_step('preparation') || {
     if $download_mode == 'bolthost' {
       # Download the PE tarball on the nodes that need it
@@ -229,6 +269,12 @@ plan peadm::upgrade (
         path   => $upload_tarball_path,
       )
     }
+
+    # Make sure the staged tarball is intact before anything is stopped, so a
+    # truncated download fails here instead of partway through the upgrade.
+    run_task('peadm::verify_tarball', $pe_installer_targets,
+      path => $upload_tarball_path,
+    )
 
     # Shut down Puppet on all infra targets. Avoid using the built-in service
     # task for idempotency reasons. When the orchestrator has been upgraded but
@@ -295,8 +341,11 @@ plan peadm::upgrade (
 
     # If in use, wait until orchestrator service is healthy to proceed
     if $all_targets.any |$target| { $target.protocol == 'pcp' } {
-      peadm::wait_until_service_ready('orchestrator-service', $primary_target)
-      wait_until_available($all_targets, wait_time => 120)
+      # The PCP reconnect wait keeps today's 120 s floor because the default
+      # service_ready_timeout (60) is shorter; operators raise both waits with
+      # the one parameter.
+      peadm::wait_until_service_ready('orchestrator-service', $primary_target, $service_ready_timeout)
+      wait_until_available($all_targets, wait_time => max(120, $service_ready_timeout))
     }
 
     # Installer-driven upgrade will de-configure auth access for compilers.
@@ -341,8 +390,11 @@ plan peadm::upgrade (
     # The primary could restart orchestration services again, in which case we
     # would have to wait for nodes to reconnect
     if $all_targets.any |$target| { $target.protocol == 'pcp' } {
-      peadm::wait_until_service_ready('orchestrator-service', $primary_target)
-      wait_until_available($all_targets, wait_time => 120)
+      # The PCP reconnect wait keeps today's 120 s floor because the default
+      # service_ready_timeout (60) is shorter; operators raise both waits with
+      # the one parameter.
+      peadm::wait_until_service_ready('orchestrator-service', $primary_target, $service_ready_timeout)
+      wait_until_available($all_targets, wait_time => max(120, $service_ready_timeout))
     }
 
     # If necessary, add missing cert extensions to compilers
@@ -376,7 +428,7 @@ plan peadm::upgrade (
         compiler_pool_address            => $compiler_pool_address,
         internal_compiler_a_pool_address => $internal_compiler_a_pool_address,
         internal_compiler_b_pool_address => $internal_compiler_b_pool_address,
-        node_group_environment           => $node_group_environment,
+        node_group_environment           => $resolved_node_group_environment,
         require                          => Class['peadm::setup::node_manager_yaml'],
       }
     }
@@ -481,7 +533,7 @@ plan peadm::upgrade (
 
     run_plan('peadm::util::update_classification',
       targets                           => $primary_target,
-      node_group_environment            => $node_group_environment,
+      node_group_environment            => $resolved_node_group_environment,
       peadm_config                      => {},
       server_a_host                     => $server_a_host,
       server_b_host                     => $server_b_host,

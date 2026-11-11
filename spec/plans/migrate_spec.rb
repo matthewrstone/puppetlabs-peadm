@@ -23,6 +23,8 @@ describe 'peadm::migrate' do
   # elsewhere in this repo for *uploads* of freshly-written local files.
   let(:downloaded_fixture_path) { File.expand_path(File.join(fixtures, 'peadm_config.json')) }
   let(:pe_version) { '2019.8.12' }
+  # pe.conf of the old primary, as read through peadm::read_file
+  let(:old_primary_pe_conf) { '{}' }
 
   # $cluster: populated from the FIRST run_task('peadm::get_peadm_config', ...)
   # call (migrate.pp lines ~53-64), used only for the pre-flight
@@ -69,7 +71,7 @@ describe 'peadm::migrate' do
   def stub_pe_conf_read!
     allow_task('peadm::read_file')
       .with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf')
-      .always_return({ 'content' => '{}' })
+      .always_return({ 'content' => old_primary_pe_conf })
   end
 
   def stub_backup_download_upload!
@@ -375,6 +377,102 @@ describe 'peadm::migrate' do
       expect_plan('peadm::add_replica').not_be_called
 
       expect(run_plan('peadm::migrate', base_params)).to be_ok
+    end
+  end
+
+  # --------------------------------------------------------------------
+  # PE-46598 / FND-07: a non-production environment on the old primary is
+  # carried into the new primary's install and restore, and the readiness
+  # deadline is forwarded to both. Production passes no environment at all.
+  # --------------------------------------------------------------------
+  describe 'environment and readiness deadline' do
+    let(:dev_pe_conf) do
+      '{"pe_install::install::classification::pe_node_group_environment": "dev", "puppet_enterprise::master::recover_configuration::pe_environment": "dev"}'
+    end
+
+    # Runs the plan and returns the parameters peadm::install and peadm::restore received.
+    def forwarded_params(extra = {})
+      stub_full_flow!
+      forwarded = {}
+      allow_plan('peadm::install').return do |params:, **_kwargs|
+        forwarded['install'] = params
+        Bolt::PlanResult.new({}, 'success')
+      end
+      allow_plan('peadm::restore').return do |params:, **_kwargs|
+        forwarded['restore'] = params
+        Bolt::PlanResult.new({}, 'success')
+      end
+      expect(run_plan('peadm::migrate', base_params.merge(extra))).to be_ok
+      forwarded
+    end
+
+    context 'when the old primary sets both environment keys to dev' do
+      let(:old_primary_pe_conf) { dev_pe_conf }
+
+      it 'installs the new primary into dev through pe_conf_data' do
+        expect(forwarded_params['install']['pe_conf_data']).to eq(
+          'pe_install::install::classification::pe_node_group_environment' => 'dev',
+          'puppet_enterprise::master::recover_configuration::pe_environment' => 'dev',
+        )
+      end
+
+      it 'restores into dev' do
+        expect(forwarded_params['restore']['node_group_environment']).to eq('dev')
+      end
+
+      it 'says which environment it found' do
+        stub_full_flow!
+        expect_out_message.with_params("Old primary uses the 'dev' environment")
+        expect(run_plan('peadm::migrate', base_params)).to be_ok
+      end
+    end
+
+    context 'when the old primary names no environment' do
+      # Catches a mutation that always passes an environment: production
+      # clusters must run the same install and restore as before.
+      it 'passes no environment to install or restore' do
+        params = forwarded_params
+        expect(params['install']).not_to have_key('pe_conf_data')
+        expect(params['restore']).not_to have_key('node_group_environment')
+      end
+    end
+
+    context 'when the old primary pe.conf keys disagree' do
+      let(:old_primary_pe_conf) do
+        '{"pe_install::install::classification::pe_node_group_environment": "dev", "puppet_enterprise::master::recover_configuration::pe_environment": "staging"}'
+      end
+
+      it 'fails before the new primary is installed' do
+        stub_full_flow!
+        expect_plan('peadm::install').not_be_called
+        result = run_plan('peadm::migrate', base_params)
+        expect(result).not_to be_ok
+        expect(result.value.msg).to match(%r{need to be set to the same value})
+      end
+    end
+
+    it 'forwards the default service_ready_timeout of 60 to install and restore' do
+      params = forwarded_params
+      expect(params['install']['service_ready_timeout']).to eq(60)
+      expect(params['restore']['service_ready_timeout']).to eq(60)
+    end
+
+    it 'forwards service_ready_timeout to install and restore' do
+      params = forwarded_params('service_ready_timeout' => 300)
+      expect(params['install']['service_ready_timeout']).to eq(300)
+      expect(params['restore']['service_ready_timeout']).to eq(300)
+    end
+
+    it 'keeps the other install and restore parameters unchanged' do
+      params = forwarded_params
+      expect(params['install']).to include('primary_host' => new_primary_host, 'code_manager_auto_configure' => true, 'download_mode' => 'direct', 'version' => pe_version)
+      expect(params['restore']).to include('targets' => new_primary_host, 'restore_type' => 'migration', 'input_file' => "/tmp/#{File.basename(backup_path)}")
+    end
+
+    it 'rejects a service_ready_timeout of 0' do
+      result = run_plan('peadm::migrate', base_params.merge('service_ready_timeout' => 0))
+      expect(result).not_to be_ok
+      expect(result.value.msg).to match(%r{parameter 'service_ready_timeout' expects an Integer\[1\] value})
     end
   end
 end

@@ -1,5 +1,15 @@
 #!/bin/bash
 source "$(dirname $0)/../../peadm/files/task_helper.sh"
+source "$(dirname $0)/../../peadm/files/failure_report.sh"
+
+# The report size can be set with the report_log_lines and report_unit_lines
+# task parameters (or by exporting the PEADM_REPORT_* variables directly).
+[ -n "$PT_report_log_lines" ] && export PEADM_REPORT_LOG_LINES="$PT_report_log_lines"
+[ -n "$PT_report_unit_lines" ] && export PEADM_REPORT_UNIT_LINES="$PT_report_unit_lines"
+
+# Systemd drop-in directory for the extra-large short-circuit; overridable so
+# the extra-large branch can be exercised in a spec.
+dropin_dir="${PE_SYSTEMD_DROPIN_DIR:-/etc/systemd/system/pe-puppetdb.service.d}"
 
 # Try and ensure locale is correctly configured
 [ -z "${LANG}" ] && export LANG=$(localectl status | sed -n 's/.* LANG=\(.*\)/\1/p')
@@ -9,8 +19,8 @@ source "$(dirname $0)/../../peadm/files/task_helper.sh"
 # configured, and we don't want to let PuppetDB wait five minutes before
 # giving up on it.
 if [ "$PT_install_extra_large" = "true" ]; then
-	mkdir /etc/systemd/system/pe-puppetdb.service.d
-	cat > /etc/systemd/system/pe-puppetdb.service.d/10-shortcircuit.conf <<-EOF
+	mkdir -p "$dropin_dir"
+	cat > "$dropin_dir/10-shortcircuit.conf" <<-EOF
 		[Service]
 		TimeoutStartSec=1
 		TimeoutStopSec=1
@@ -18,6 +28,17 @@ if [ "$PT_install_extra_large" = "true" ]; then
 	EOF
 	systemctl daemon-reload
 fi
+
+# On failure, print what a person would otherwise have to log in and look up:
+# the redacted tail of the most recent installer log and the state of any
+# failed pe-* services (see files/failure_report.sh). This goes to stdout so
+# Bolt includes it in the task failure.
+report_installer_failure() {
+	local installer_log_dir="${PE_INSTALLER_LOG_DIR:-/var/log/puppetlabs/installer}"
+	local latest_log
+	latest_log=$(ls -t "$installer_log_dir"/*.install.log 2>/dev/null | head -n 1)
+	peadm_failure_report "$1" "Puppet Enterprise installer" "$latest_log"
+}
 
 tgzdir=$(dirname "$PT_tarball")
 pedir=$(tar -tf "$PT_tarball" | head -n 1 | xargs dirname)
@@ -54,7 +75,7 @@ exit_code=$?
 
 if [ "$PT_install_extra_large" = "true" ]; then
 	systemctl stop pe-puppetdb.service
-	rm /etc/systemd/system/pe-puppetdb.service.d/10-shortcircuit.conf
+	rm "$dropin_dir/10-shortcircuit.conf"
 	systemctl daemon-reload
 fi
 
@@ -68,10 +89,14 @@ fi
 # long as some basic "did it install?" health checks pass.
 if [ "$PT_install_extra_large" = "true" ]; then
 	for svc in pe-puppetserver pe-orchestration-services pe-console-services; do
-		systemctl is-active --quiet $svc.service || exit $exit_code
+		if ! systemctl is-active --quiet $svc.service; then
+			report_installer_failure "$exit_code"
+			exit $exit_code
+		fi
 	done
 	exit 0
 else
+	[ "$exit_code" -ne 0 ] && report_installer_failure "$exit_code"
 	# Exit with the installer script's exit code
 	exit $exit_code
 fi

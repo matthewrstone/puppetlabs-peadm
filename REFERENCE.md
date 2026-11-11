@@ -37,6 +37,7 @@ primary_host vs replica_host) the node was passed as.
 * [`peadm::get_node_group_environment`](#peadm--get_node_group_environment): check if a custom PE environment is set in pe.conf
 * [`peadm::get_pe_conf`](#peadm--get_pe_conf)
 * [`peadm::get_targets`](#peadm--get_targets): Accept undef or a SingleTargetSpec, and return an Array[Target, 1, 0]. This differs from get_target() in that:   - It returns an Array[Target
+* [`peadm::installer_tarball_name`](#peadm--installer_tarball_name): Returns the installer file name from a URL, without query string or fragment
 * [`peadm::log_plan_parameters`](#peadm--log_plan_parameters)
 * [`peadm::migration_opts_default`](#peadm--migration_opts_default)
 * [`peadm::module_version`](#peadm--module_version)
@@ -47,6 +48,7 @@ primary_host vs replica_host) the node was passed as.
 * [`peadm::recovery_opts_all`](#peadm--recovery_opts_all)
 * [`peadm::recovery_opts_default`](#peadm--recovery_opts_default)
 * [`peadm::sanitize_log_text`](#peadm--sanitize_log_text): Makes arbitrary external text safe to interpolate into a single log line.
+* [`peadm::supported_pe_versions`](#peadm--supported_pe_versions): Returns the supported PE version range and the install default from data/pe_versions.yaml, as a Hash with 'oldest', 'newest' and 'default' ke
 * [`peadm::update_pe_conf`](#peadm--update_pe_conf): Update the pe.conf file on a target with the provided hash
 * [`peadm::wait_until_service_ready`](#peadm--wait_until_service_ready): A convenience function to help remember port numbers for services and handle running the wait_until_service_ready task
 * [`peadm::warn_group_rules_overwrite`](#peadm--warn_group_rules_overwrite): Fetch and log the PE Infrastructure Agent group's current rules
@@ -54,10 +56,12 @@ before they get overwritten by a classification reassertion
 
 ### Data types
 
+* [`Peadm::AddDatabaseSteps`](#Peadm--AddDatabaseSteps): type for the different steps where the peadm::add_database plan can be started
 * [`Peadm::ConvertSteps`](#Peadm--ConvertSteps): type for the different steps where the peadm::convert plan can be started
 * [`Peadm::Download_mode`](#Peadm--Download_mode): download the installer to the bolt node and upload to targets, or let the targets download it directly
 * [`Peadm::Known_hosts`](#Peadm--Known_hosts)
 * [`Peadm::Ldap_config`](#Peadm--Ldap_config)
+* [`Peadm::Pe_environment`](#Peadm--Pe_environment): A Puppet environment name: lowercase letters, digits and underscores
 * [`Peadm::Pe_version`](#Peadm--Pe_version)
 * [`Peadm::Pem`](#Peadm--Pem)
 * [`Peadm::Recovery_opts`](#Peadm--Recovery_opts)
@@ -68,6 +72,7 @@ before they get overwritten by a classification reassertion
 
 * [`agent_install`](#agent_install): Install the Puppet agent from a master
 * [`backup_classification`](#backup_classification): A task to call the classification api and write to file
+* [`ca_storage_backend`](#ca_storage_backend): Report whether Puppet Server keeps the CA in the pe-ca database or on the filesystem, by checking /etc/puppetlabs/puppetserver/bootstrap.cfg,
 * [`cert_data`](#cert_data): Return certificate data related to the Puppet agent
 * [`cert_valid_status`](#cert_valid_status): Check primary for valid state of a certificate
 * [`check_pe_master_rules`](#check_pe_master_rules): Checks if the PE Master group rules have already been updated to support 'pe_compiler_legacy' as a pp_auth_role
@@ -105,8 +110,10 @@ before they get overwritten by a classification reassertion
 * [`submit_csr`](#submit_csr): Submit a certificate signing request
 * [`transform_classification_groups`](#transform_classification_groups): Transform the user groups from a source backup to a list of groups on the target server
 * [`update_pe_master_rules`](#update_pe_master_rules): Updates the PE Master group rules to support 'pe_compiler_legacy' as a pp_auth_role
+* [`validate_cert`](#validate_cert): Check a certificate, and optionally its key, chain and CRL, and report structured findings (severity, code, message). Exits 0 whenever the ch
 * [`validate_rbac_token`](#validate_rbac_token): Check an RBAC token stored in a file is valid
-* [`wait_until_service_ready`](#wait_until_service_ready): Return when the orchestrator service is healthy, or timeout after 15 seconds
+* [`verify_tarball`](#verify_tarball): Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it
+* [`wait_until_service_ready`](#wait_until_service_ready): Return when the named PE service answers healthy on its status API, or fail after the timeout (default 60 seconds) with a report of what was 
 
 ### Plans
 
@@ -127,10 +134,10 @@ Supported use cases:
 * [`peadm::modify_certificate`](#peadm--modify_certificate): Modify the certificate of one or more targets
 * [`peadm::replace_failed_postgresql`](#peadm--replace_failed_postgresql): Replaces a failed PostgreSQL host
 * [`peadm::restore`](#peadm--restore): Restore puppet primary configuration
-* [`peadm::restore_ca`](#peadm--restore_ca)
+* [`peadm::restore_ca`](#peadm--restore_ca): Restore the CA and ssl certificates from a puppet-backup certs archive
 * [`peadm::status`](#peadm--status): Return status information from one or more PE clusters in a table format
 * [`peadm::upgrade`](#peadm--upgrade): Upgrade a PEAdm-managed cluster
-* [`peadm::util::init_db_server`](#peadm--util--init_db_server)
+* [`peadm::util::init_db_server`](#peadm--util--init_db_server): Prepare a new PostgreSQL node for an existing primary and its compilers
 
 #### Private Plans
 
@@ -145,7 +152,7 @@ Supported use cases:
 * `peadm::subplans::prepare_agent`
 * `peadm::uninstall`: Single-entry-point plan for uninstalling Puppet Enterprise
 * `peadm::util::code_sync_status`
-* `peadm::util::copy_file`
+* `peadm::util::copy_file`: Copy one file's content from a source host to the target hosts
 * `peadm::util::db_disable_pglogical`
 * `peadm::util::db_purge`
 * `peadm::util::insert_csr_extension_requests`
@@ -798,17 +805,19 @@ Type: Puppet Language
 
 check if a custom PE environment is set in pe.conf
 
-#### `peadm::get_node_group_environment(Peadm::SingleTargetSpec $primary)`
+#### `peadm::get_node_group_environment(Variant[Peadm::SingleTargetSpec, Hash] $primary)`
 
 The peadm::get_node_group_environment function.
 
-Returns: `String` the desired environment for PE specific node groups
+Returns: `Peadm::Pe_environment` the desired environment for PE specific node groups
 
 ##### `primary`
 
-Data type: `Peadm::SingleTargetSpec`
+Data type: `Variant[Peadm::SingleTargetSpec, Hash]`
 
-the FQDN for the primary, here we will read the pe.conf from
+Either the FQDN (or Target) of the primary, whose pe.conf is read, or a Hash
+holding pe.conf data directly (for example the `pe_conf_data` given to
+peadm::install, before any pe.conf exists on a node).
 
 ### <a name="peadm--get_pe_conf"></a>`peadm::get_pe_conf`
 
@@ -857,6 +866,64 @@ Data type: `Variant[TargetSpec, Undef]`
 Data type: `Optional[Integer[1,1]]`
 
 
+
+### <a name="peadm--installer_tarball_name"></a>`peadm::installer_tarball_name`
+
+Type: Puppet Language
+
+The file name of a PE installer URL is its last path segment. A pre-signed
+URL (for example an S3 one) carries a query string with the signature after
+it, and that must never become part of a log line, an upload path or a
+directory name. The full URL is still the download source; only the name
+derived from it is cleaned.
+
+#### Examples
+
+##### A pre-signed URL
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz?X-Amz-Signature=abc')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz'
+```
+
+##### A URL with a fragment
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar#frag')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar'
+```
+
+#### `peadm::installer_tarball_name(String[1] $url)`
+
+The file name of a PE installer URL is its last path segment. A pre-signed
+URL (for example an S3 one) carries a query string with the signature after
+it, and that must never become part of a log line, an upload path or a
+directory name. The full URL is still the download source; only the name
+derived from it is cleaned.
+
+Returns: `String` The last path segment of the URL, with `?query` and `#fragment` removed
+
+##### Examples
+
+###### A pre-signed URL
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz?X-Amz-Signature=abc')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar.gz'
+```
+
+###### A URL with a fragment
+
+```puppet
+peadm::installer_tarball_name('https://h/p/puppet-enterprise-2025.12.1-el-9-x86_64.tar#frag')
+# => 'puppet-enterprise-2025.12.1-el-9-x86_64.tar'
+```
+
+##### `url`
+
+Data type: `String[1]`
+
+The installer URL, with or without a query string or fragment
 
 ### <a name="peadm--log_plan_parameters"></a>`peadm::log_plan_parameters`
 
@@ -1025,6 +1092,20 @@ Data type: `Integer[0]`
 
 Maximum length of the returned string.
 
+### <a name="peadm--supported_pe_versions"></a>`peadm::supported_pe_versions`
+
+Type: Ruby 4.x API
+
+Returns the supported PE version range and the install default from
+data/pe_versions.yaml, as a Hash with 'oldest', 'newest' and 'default' keys.
+
+#### `peadm::supported_pe_versions()`
+
+Returns the supported PE version range and the install default from
+data/pe_versions.yaml, as a Hash with 'oldest', 'newest' and 'default' keys.
+
+Returns: `Struct[{oldest => String, newest => String, "default" => String}]`
+
 ### <a name="peadm--update_pe_conf"></a>`peadm::update_pe_conf`
 
 Type: Puppet Language
@@ -1056,7 +1137,7 @@ Type: Puppet Language
 A convenience function to help remember port numbers for services and handle
 running the wait_until_service_ready task
 
-#### `peadm::wait_until_service_ready(String $service, TargetSpec $target)`
+#### `peadm::wait_until_service_ready(String $service, TargetSpec $target, Integer[1] $timeout = 60)`
 
 A convenience function to help remember port numbers for services and handle
 running the wait_until_service_ready task
@@ -1067,13 +1148,19 @@ Returns: `Any`
 
 Data type: `String`
 
-
+The service to wait for: all, ca, pe-master or orchestrator-service
 
 ##### `target`
 
 Data type: `TargetSpec`
 
+The node to check
 
+##### `timeout`
+
+Data type: `Integer[1]`
+
+Seconds to keep waiting before the task fails with a report. Defaults to 60.
 
 ### <a name="peadm--warn_group_rules_overwrite"></a>`peadm::warn_group_rules_overwrite`
 
@@ -1100,6 +1187,12 @@ Data type: `Peadm::SingleTargetSpec`
 the target to fetch the PE Infrastructure Agent group's rules from
 
 ## Data types
+
+### <a name="Peadm--AddDatabaseSteps"></a>`Peadm::AddDatabaseSteps`
+
+type for the different steps where the peadm::add_database plan can be started
+
+Alias of `Enum['init-db-node', 'replicate-db', 'update-classification', 'update-db-settings', 'cleanup-db', 'finalize']`
 
 ### <a name="Peadm--ConvertSteps"></a>`Peadm::ConvertSteps`
 
@@ -1164,6 +1257,12 @@ Struct[{
 }]
 ```
 
+### <a name="Peadm--Pe_environment"></a>`Peadm::Pe_environment`
+
+A Puppet environment name: lowercase letters, digits and underscores
+
+Alias of `Pattern[/\A[a-z0-9_]+\z/]`
+
 ### <a name="Peadm--Pe_version"></a>`Peadm::Pe_version`
 
 The Peadm::Pe_version data type.
@@ -1209,7 +1308,7 @@ Alias of `Variant[Pattern[/\A[^[:space:],]+\z/], Target, Array[Peadm::SingleTarg
 
 type for the different steps where the peadm::upgrade plan can be started
 
-Alias of `Enum['upgrade-primary', 'upgrade-node-groups', 'upgrade-primary-compilers', 'upgrade-replica', 'upgrade-replica-compilers', 'finalize']`
+Alias of `Enum['preparation', 'upgrade-primary', 'upgrade-node-groups', 'upgrade-primary-compilers', 'upgrade-replica', 'upgrade-replica-compilers', 'finalize']`
 
 ## Tasks
 
@@ -1246,6 +1345,12 @@ A task to call the classification api and write to file
 Data type: `String`
 
 The directory to write the classification output to. Directory must exist
+
+### <a name="ca_storage_backend"></a>`ca_storage_backend`
+
+Report whether Puppet Server keeps the CA in the pe-ca database or on the filesystem, by checking /etc/puppetlabs/puppetserver/bootstrap.cfg, /etc/puppetlabs/puppetserver/services.d/*.cfg and /opt/puppetlabs/server/apps/puppetserver/config/services.d/*.cfg. Returns backend (database, filesystem or unknown when none of those files exists), the file that matched, and the paths checked.
+
+**Supports noop?** false
 
 ### <a name="cert_data"></a>`cert_data`
 
@@ -1567,6 +1672,18 @@ Data type: `Optional[Enum['stopped']]`
 
 If 'stopped', ensure the Puppet agent is not running when install completes
 
+##### `report_log_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of the newest installer log to show if the installer fails. Defaults to 40
+
+##### `report_unit_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of systemctl status to show for each failed pe-* service if the installer fails. Defaults to 15
+
 ### <a name="pe_ldap_config"></a>`pe_ldap_config`
 
 Set the ldap config in the PE console
@@ -1618,6 +1735,18 @@ The path to the pe.conf file
 Data type: `Optional[Enum['stopped']]`
 
 If 'stopped', ensure the Puppet agent is not running when install completes
+
+##### `report_log_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of the newest installer log to show if the installer fails. Defaults to 40
+
+##### `report_unit_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of systemctl status to show for each failed pe-* service if the installer fails. Defaults to 15
 
 ### <a name="pe_uninstall"></a>`pe_uninstall`
 
@@ -1781,6 +1910,18 @@ Data type: `Boolean`
 
 Whether we want to uninstall PE before installing
 
+##### `report_log_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of the installer log to include when the installer fails. Defaults to 40.
+
+##### `report_unit_lines`
+
+Data type: `Optional[Integer[1]]`
+
+How many lines of systemctl status to include for each failed pe-* service when the installer fails. Defaults to 15.
+
 ### <a name="restore_classification"></a>`restore_classification`
 
 A short description of this task
@@ -1863,6 +2004,50 @@ Updates the PE Master group rules to support 'pe_compiler_legacy' as a pp_auth_r
 
 **Supports noop?** false
 
+### <a name="validate_cert"></a>`validate_cert`
+
+Check a certificate, and optionally its key, chain and CRL, and report structured findings (severity, code, message). Exits 0 whenever the checks ran; the caller decides whether a finding fails or only warns
+
+**Supports noop?** false
+
+#### Parameters
+
+##### `cert_path`
+
+Data type: `String[1]`
+
+Path to the certificate to check (PEM or DER)
+
+##### `key_path`
+
+Data type: `Optional[String[1]]`
+
+Path to the private key (PEM or DER; RSA, EC or Ed25519). When given, the key must match the certificate
+
+##### `chain_path`
+
+Data type: `Optional[String[1]]`
+
+Path to a PEM bundle of intermediate and root certificates. When given, the certificate is verified against it
+
+##### `crl_path`
+
+Data type: `Optional[String[1]]`
+
+Path to a certificate revocation list (PEM with a BEGIN X509 CRL header, or DER). When given, the CRL is checked for staleness, issuer and revocation of the certificate
+
+##### `warn_days`
+
+Data type: `Optional[Integer[0]]`
+
+Report a warning when the certificate expires within this many days (default 30)
+
+##### `key_passphrase`
+
+Data type: `Optional[String[1]]`
+
+Passphrase for an encrypted private key
+
 ### <a name="validate_rbac_token"></a>`validate_rbac_token`
 
 Check an RBAC token stored in a file is valid
@@ -1877,9 +2062,23 @@ Data type: `Optional[String]`
 
 The path to the token file to use
 
+### <a name="verify_tarball"></a>`verify_tarball`
+
+Verify that a Puppet Enterprise installer tarball is present and intact, without extracting it
+
+**Supports noop?** false
+
+#### Parameters
+
+##### `path`
+
+Data type: `String`
+
+Path to the Puppet Enterprise tarball
+
 ### <a name="wait_until_service_ready"></a>`wait_until_service_ready`
 
-Return when the orchestrator service is healthy, or timeout after 15 seconds
+Return when the named PE service answers healthy on its status API, or fail after the timeout (default 60 seconds) with a report of what was awaited, the last HTTP result, failed pe-* units and the redacted service log tail
 
 **Supports noop?** false
 
@@ -1896,6 +2095,18 @@ What service to check. For example: all, pe-master, orchestrator-service
 Data type: `Enum['8140', '8143']`
 
 Which port to query the status API on
+
+##### `timeout`
+
+Data type: `Optional[Integer[1]]`
+
+Seconds to keep waiting before failing. Defaults to 60.
+
+##### `interval`
+
+Data type: `Optional[Integer[1]]`
+
+Seconds to sleep between attempts. Defaults to 3.
 
 ## Plans
 
@@ -2016,11 +2227,11 @@ The following parameters are available in the `peadm::add_database` plan:
 
 ##### <a name="-peadm--add_database--node_group_environment"></a>`node_group_environment`
 
-Data type: `String[1]`
+Data type: `Optional[String[1]]`
 
 environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
 
-Default value: `peadm::get_node_group_environment($primary_host)`
+Default value: `undef`
 
 ##### <a name="-peadm--add_database--targets"></a>`targets`
 
@@ -2044,17 +2255,7 @@ Default value: `undef`
 
 ##### <a name="-peadm--add_database--begin_at_step"></a>`begin_at_step`
 
-Data type:
-
-```puppet
-Optional[Enum[
-      'init-db-node',
-      'replicate-db',
-      'update-classification',
-      'update-db-settings',
-      'cleanup-db',
-  'finalize']]
-```
+Data type: `Optional[Peadm::AddDatabaseSteps]`
 
 
 
@@ -2084,6 +2285,7 @@ The following parameters are available in the `peadm::add_replica` plan:
 * [`replica_postgresql_host`](#-peadm--add_replica--replica_postgresql_host)
 * [`token_file`](#-peadm--add_replica--token_file)
 * [`node_group_environment`](#-peadm--add_replica--node_group_environment)
+* [`service_ready_timeout`](#-peadm--add_replica--service_ready_timeout)
 
 ##### <a name="-peadm--add_replica--primary_host"></a>`primary_host`
 
@@ -2121,6 +2323,14 @@ Data type: `String[1]`
 environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
 
 Default value: `peadm::get_node_group_environment($primary_host)`
+
+##### <a name="-peadm--add_replica--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait may take before it fails with a report. Default 60.
+
+Default value: `60`
 
 ### <a name="peadm--backup"></a>`peadm::backup`
 
@@ -2210,6 +2420,7 @@ The following parameters are available in the `peadm::convert` plan:
 
 * [`begin_at_step`](#-peadm--convert--begin_at_step)
 * [`node_group_environment`](#-peadm--convert--node_group_environment)
+* [`service_ready_timeout`](#-peadm--convert--service_ready_timeout)
 * [`primary_host`](#-peadm--convert--primary_host)
 * [`replica_host`](#-peadm--convert--replica_host)
 * [`compiler_hosts`](#-peadm--convert--compiler_hosts)
@@ -2231,11 +2442,20 @@ Default value: `undef`
 
 ##### <a name="-peadm--convert--node_group_environment"></a>`node_group_environment`
 
-Data type: `String[1]`
+Data type: `Optional[String[1]]`
 
-environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+environment for the PEADM specific node groups, if not set it is read from the primary's pe.conf, or production
 
-Default value: `peadm::get_node_group_environment($primary_host)`
+Default value: `undef`
+
+##### <a name="-peadm--convert--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait may take before it fails with a report. Default 60.
+The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
+
+Default value: `60`
 
 ##### <a name="-peadm--convert--primary_host"></a>`primary_host`
 
@@ -2326,12 +2546,14 @@ The following parameters are available in the `peadm::install` plan:
 * [`compiler_pool_address`](#-peadm--install--compiler_pool_address)
 * [`internal_compiler_a_pool_address`](#-peadm--install--internal_compiler_a_pool_address)
 * [`internal_compiler_b_pool_address`](#-peadm--install--internal_compiler_b_pool_address)
+* [`version`](#-peadm--install--version)
 * [`pe_installer_source`](#-peadm--install--pe_installer_source)
 * [`ldap_config`](#-peadm--install--ldap_config)
 * [`final_agent_state`](#-peadm--install--final_agent_state)
 * [`stagingdir`](#-peadm--install--stagingdir)
 * [`uploaddir`](#-peadm--install--uploaddir)
 * [`cloud_database_host`](#-peadm--install--cloud_database_host)
+* [`service_ready_timeout`](#-peadm--install--service_ready_timeout)
 * [`primary_host`](#-peadm--install--primary_host)
 * [`replica_host`](#-peadm--install--replica_host)
 * [`compiler_hosts`](#-peadm--install--compiler_hosts)
@@ -2339,7 +2561,6 @@ The following parameters are available in the `peadm::install` plan:
 * [`primary_postgresql_host`](#-peadm--install--primary_postgresql_host)
 * [`replica_postgresql_host`](#-peadm--install--replica_postgresql_host)
 * [`console_password`](#-peadm--install--console_password)
-* [`version`](#-peadm--install--version)
 * [`dns_alt_names`](#-peadm--install--dns_alt_names)
 * [`pe_conf_data`](#-peadm--install--pe_conf_data)
 * [`code_manager_auto_configure`](#-peadm--install--code_manager_auto_configure)
@@ -2382,6 +2603,16 @@ compilers. This is used for DR configuration in large and extra large
 architectures.
 
 Default value: `undef`
+
+##### <a name="-peadm--install--version"></a>`version`
+
+Data type: `Peadm::Pe_version`
+
+The PE version to install. Defaults to the `default` key in
+data/pe_versions.yaml (via peadm::supported_pe_versions), which is
+checked to lie inside the supported range.
+
+Default value: `peadm::supported_pe_versions()['default']`
 
 ##### <a name="-peadm--install--pe_installer_source"></a>`pe_installer_source`
 
@@ -2447,6 +2678,16 @@ managed external Postgres target.
 
 Default value: `undef`
 
+##### <a name="-peadm--install--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait during the install and configure steps
+may take before it fails with a report. Raise it for slow nodes. Defaults
+to 60.
+
+Default value: `60`
+
 ##### <a name="-peadm--install--primary_host"></a>`primary_host`
 
 Data type: `Peadm::SingleTargetSpec`
@@ -2498,14 +2739,6 @@ Default value: `undef`
 Data type: `String`
 
 
-
-##### <a name="-peadm--install--version"></a>`version`
-
-Data type: `Peadm::Pe_version`
-
-
-
-Default value: `'2025.12.1'`
 
 ##### <a name="-peadm--install--dns_alt_names"></a>`dns_alt_names`
 
@@ -2625,6 +2858,7 @@ The following parameters are available in the `peadm::migrate` plan:
 * [`replica_host`](#-peadm--migrate--replica_host)
 * [`primary_postgresql_host`](#-peadm--migrate--primary_postgresql_host)
 * [`replica_postgresql_host`](#-peadm--migrate--replica_postgresql_host)
+* [`service_ready_timeout`](#-peadm--migrate--service_ready_timeout)
 
 ##### <a name="-peadm--migrate--old_primary_host"></a>`old_primary_host`
 
@@ -2669,6 +2903,14 @@ Data type: `Optional[Peadm::SingleTargetSpec]`
 Optional new replica PostgreSQL server to be added to the cluster
 
 Default value: `undef`
+
+##### <a name="-peadm--migrate--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds to wait for PE services to be ready on the new primary, passed to peadm::install and peadm::restore
+
+Default value: `60`
 
 ### <a name="peadm--modify_certificate"></a>`peadm::modify_certificate`
 
@@ -2795,6 +3037,8 @@ The following parameters are available in the `peadm::restore` plan:
 * [`restore`](#-peadm--restore--restore)
 * [`input_file`](#-peadm--restore--input_file)
 * [`console_password`](#-peadm--restore--console_password)
+* [`node_group_environment`](#-peadm--restore--node_group_environment)
+* [`service_ready_timeout`](#-peadm--restore--service_ready_timeout)
 
 ##### <a name="-peadm--restore--targets"></a>`targets`
 
@@ -2828,13 +3072,31 @@ The file containing the backup to restore from
 
 Data type: `Optional[String]`
 
-
+Console password for the restored system, needed to fetch an RBAC token when restoring a migration
 
 Default value: `undef`
 
+##### <a name="-peadm--restore--node_group_environment"></a>`node_group_environment`
+
+Data type: `Optional[Peadm::Pe_environment]`
+
+The environment passed to `puppet-backup restore --pe-environment` when it is not production.
+Defaults to the environment recorded in the backup (peadm/node_group_environment.json), then
+to the one set in the primary's pe.conf, then to production.
+
+Default value: `undef`
+
+##### <a name="-peadm--restore--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds to wait for the PE services to be ready after the restore, before the plan fails.
+
+Default value: `60`
+
 ### <a name="peadm--restore_ca"></a>`peadm::restore_ca`
 
-The peadm::restore_ca class.
+Restore the CA and ssl certificates from a puppet-backup certs archive
 
 #### Parameters
 
@@ -2843,26 +3105,36 @@ The following parameters are available in the `peadm::restore_ca` plan:
 * [`target`](#-peadm--restore_ca--target)
 * [`file_path`](#-peadm--restore_ca--file_path)
 * [`recovery_directory`](#-peadm--restore_ca--recovery_directory)
+* [`node_group_environment`](#-peadm--restore_ca--node_group_environment)
 
 ##### <a name="-peadm--restore_ca--target"></a>`target`
 
 Data type: `Peadm::SingleTargetSpec`
 
-
+The primary puppetserver to restore the certificates on
 
 ##### <a name="-peadm--restore_ca--file_path"></a>`file_path`
 
 Data type: `String`
 
-
+The puppet-backup archive (scope certs) to restore from
 
 ##### <a name="-peadm--restore_ca--recovery_directory"></a>`recovery_directory`
 
 Data type: `Optional[String]`
 
-
+Temporary directory puppet-backup restore works in
 
 Default value: `'/tmp/peadm_recovery'`
+
+##### <a name="-peadm--restore_ca--node_group_environment"></a>`node_group_environment`
+
+Data type: `Optional[Peadm::Pe_environment]`
+
+The environment passed to `puppet-backup restore --pe-environment` when it is not production.
+Defaults to the one set in the target's pe.conf, then to production.
+
+Default value: `undef`
 
 ### <a name="peadm--status"></a>`peadm::status`
 
@@ -2942,6 +3214,7 @@ The following parameters are available in the `peadm::upgrade` plan:
 * [`uploaddir`](#-peadm--upgrade--uploaddir)
 * [`begin_at_step`](#-peadm--upgrade--begin_at_step)
 * [`node_group_environment`](#-peadm--upgrade--node_group_environment)
+* [`service_ready_timeout`](#-peadm--upgrade--service_ready_timeout)
 * [`primary_host`](#-peadm--upgrade--primary_host)
 * [`replica_host`](#-peadm--upgrade--replica_host)
 * [`compiler_hosts`](#-peadm--upgrade--compiler_hosts)
@@ -3040,11 +3313,20 @@ Default value: `undef`
 
 ##### <a name="-peadm--upgrade--node_group_environment"></a>`node_group_environment`
 
-Data type: `String[1]`
+Data type: `Optional[String[1]]`
 
-environment for the PEADM specific node groups, if not set it will be gathered from pe.conf or production
+environment for the PEADM specific node groups, if not set it is read from the primary's pe.conf, or production
 
-Default value: `peadm::get_node_group_environment($primary_host)`
+Default value: `undef`
+
+##### <a name="-peadm--upgrade--service_ready_timeout"></a>`service_ready_timeout`
+
+Data type: `Integer[1]`
+
+Seconds each service readiness wait may take before it fails with a report. Default 60.
+The wait for nodes to reconnect over PCP uses the larger of this and 120 seconds.
+
+Default value: `60`
 
 ##### <a name="-peadm--upgrade--primary_host"></a>`primary_host`
 
@@ -3118,7 +3400,7 @@ Default value: `false`
 
 ### <a name="peadm--util--init_db_server"></a>`peadm::util::init_db_server`
 
-The peadm::util::init_db_server class.
+Prepare a new PostgreSQL node for an existing primary and its compilers
 
 #### Parameters
 
@@ -3128,18 +3410,19 @@ The following parameters are available in the `peadm::util::init_db_server` plan
 * [`install_pe`](#-peadm--util--init_db_server--install_pe)
 * [`pe_version`](#-peadm--util--init_db_server--pe_version)
 * [`pe_platform`](#-peadm--util--init_db_server--pe_platform)
+* [`wait_time`](#-peadm--util--init_db_server--wait_time)
 
 ##### <a name="-peadm--util--init_db_server--db_host"></a>`db_host`
 
 Data type: `String[1]`
 
-
+The node to initialise as the PE PostgreSQL host.
 
 ##### <a name="-peadm--util--init_db_server--install_pe"></a>`install_pe`
 
 Data type: `Boolean`
 
-
+Run the PE installer on the database node.
 
 Default value: `false`
 
@@ -3147,7 +3430,7 @@ Default value: `false`
 
 Data type: `String[1]`
 
-
+The PE version to install when install_pe is set.
 
 Default value: `'2023.5.0'`
 
@@ -3155,7 +3438,17 @@ Default value: `'2023.5.0'`
 
 Data type: `String[1]`
 
-
+The installer platform to download when install_pe is set.
 
 Default value: `'el-8-x86_64'`
+
+##### <a name="-peadm--util--init_db_server--wait_time"></a>`wait_time`
+
+Data type: `Integer[1]`
+
+Seconds to wait for the inventory targets to become reachable before
+failing. Defaults to 120, which is Bolt's own default for
+wait_until_available.
+
+Default value: `120`
 

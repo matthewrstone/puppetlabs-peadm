@@ -164,6 +164,65 @@ describe 'peadm::subplans::configure' do
     end
   end
 
+  # P1-16: the pre-replica readiness wait takes the operator's deadline.
+  describe 'service_ready_timeout' do
+    # Catches a mutation that drops the timeout from the wait (it would stay 60).
+    it 'passes service_ready_timeout to the readiness wait before provisioning the replica' do
+      allow_standard_calls!
+      timeouts = []
+      allow_task('peadm::wait_until_service_ready').return do |targets:, params:, **|
+        timeouts << params['timeout']
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+      end
+
+      expect(run_plan('peadm::subplans::configure',
+                       'primary_host'          => 'primary',
+                       'replica_host'          => 'replica',
+                       'service_ready_timeout' => 120,
+                       'token_file'            => '/tmp/token')).to be_ok
+      expect(timeouts).to eq([120])
+    end
+
+    it 'waits 60 seconds when no service_ready_timeout is given' do
+      allow_standard_calls!
+      timeouts = []
+      allow_task('peadm::wait_until_service_ready').return do |targets:, params:, **|
+        timeouts << params['timeout']
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+      end
+
+      expect(run_plan('peadm::subplans::configure', 'primary_host' => 'primary', 'replica_host' => 'replica')).to be_ok
+      expect(timeouts).to eq([60])
+    end
+  end
+
+  # P1-16: the environment reaches peadm::setup::node_manager.
+  describe 'node_group_environment' do
+    it 'is accepted by the plan' do
+      allow_standard_calls!
+      expect(run_plan('peadm::subplans::configure', 'primary_host' => 'primary', 'node_group_environment' => 'dev')).to be_ok
+    end
+
+    it 'rejects a name that is not a valid Puppet environment name' do
+      allow_standard_calls!
+      expect(run_plan('peadm::subplans::configure', 'primary_host' => 'primary', 'node_group_environment' => 'Dev-1')).not_to be_ok
+    end
+
+    # BoltSpec cannot see parameters inside an apply() block (MockExecutor#apply
+    # returns before any catalog is compiled; see the NOTE above), so this is a
+    # static check, scoped to the node_manager class declaration so that another
+    # mention of the parameter elsewhere in the plan cannot satisfy it.
+    # Catches a mutation that drops the mapping: the class default 'production'
+    # would then win even when pe_conf_data names another environment.
+    it 'is mapped into the peadm::setup::node_manager class declaration' do
+      plan_text = File.read(File.join(__dir__, '..', '..', '..', 'plans', 'subplans', 'configure.pp'))
+      start = plan_text.index("class { 'peadm::setup::node_manager':")
+      expect(start).not_to be_nil, 'the node_manager class declaration was not found in configure.pp'
+      declaration = plan_text[start..plan_text.index("\n    }", start)]
+      expect(declaration).to match(%r{node_group_environment\s*=>\s*\$node_group_environment})
+    end
+  end
+
   describe 'Extra Large architecture with DR' do
     it 'waits for the primary only, then still provisions the replica against the primary, not the postgresql hosts' do
       allow_standard_calls!

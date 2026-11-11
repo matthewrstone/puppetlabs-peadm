@@ -1,12 +1,20 @@
 require 'spec_helper'
+require 'tmpdir'
 require_relative '../../../tasks/rbac_token'
 
 describe RbacToken do
-  subject(:rbac_token) { described_class.new(params) }
+  subject(:rbac_token) { described_class.new(params, token_path: token_path) }
 
+  # A real directory, so the file and directory modes are checked on real files.
+  let(:tmpdir) { Dir.mktmpdir('rbac_token_spec') }
+  let(:token_path) { File.join(tmpdir, '.puppetlabs', 'token') }
   let(:params) { { 'password' => 'supersecret', 'token_lifetime' => '1y' } }
   let(:https_dbl) { instance_double(Net::HTTP) }
   let(:request_dbl) { instance_double(Net::HTTP::Post) }
+
+  after(:each) do
+    FileUtils.remove_entry(tmpdir)
+  end
 
   before(:each) do
     allow(Puppet).to receive(:initialize_settings)
@@ -45,9 +53,6 @@ describe RbacToken do
     success_response = instance_double(Net::HTTPOK, body: { 'token' => 'abc123' }.to_json)
     allow(success_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
     allow(https_dbl).to receive(:request).with(request_dbl).and_return(success_response)
-    allow(FileUtils).to receive(:mkdir_p)
-    file_dbl = instance_double(File, write: nil)
-    allow(File).to receive(:open).with('/root/.puppetlabs/token', 'w').and_yield(file_dbl)
 
     rbac_token.execute!
   end
@@ -162,20 +167,70 @@ describe RbacToken do
     end
   end
 
+  def stub_token_response(token)
+    success_response = instance_double(Net::HTTPOK, body: { 'token' => token }.to_json)
+    allow(success_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
+    allow(https_dbl).to receive(:request).with(request_dbl).and_return(success_response)
+  end
+
+  def mode_of(path)
+    File.stat(path).mode & 0o777
+  end
+
   # Catches a mutation that writes the wrong content (e.g. the whole
   # response body instead of just the extracted token) or the wrong path,
   # which would leave a broken/garbage token file on disk.
-  it 'extracts the token from the JSON response and writes only the token to /root/.puppetlabs/token' do
-    success_response = instance_double(Net::HTTPOK, body: { 'token' => 'the-extracted-token' }.to_json)
-    allow(success_response).to receive(:is_a?).with(Net::HTTPSuccess).and_return(true)
-    allow(https_dbl).to receive(:request).with(request_dbl).and_return(success_response)
-
-    expect(FileUtils).to receive(:mkdir_p).with('/root/.puppetlabs')
-    file_dbl = instance_double(File)
-    expect(file_dbl).to receive(:write).with('the-extracted-token')
-    expect(File).to receive(:open).with('/root/.puppetlabs/token', 'w').and_yield(file_dbl)
+  it 'extracts the token from the JSON response and writes only the token to the token path' do
+    stub_token_response('the-extracted-token')
 
     rbac_token.execute!
+
+    expect(File.binread(token_path)).to eq('the-extracted-token')
+  end
+
+  # Catches a mutation that goes back to File.open(path, 'w'), which leaves the
+  # admin token readable by other users whenever the umask is 022 or looser.
+  it 'creates the token directory 0700 and the token file 0600, whatever the umask' do
+    stub_token_response('the-extracted-token')
+    old_umask = File.umask(0o000)
+
+    begin
+      rbac_token.execute!
+    ensure
+      File.umask(old_umask)
+    end
+
+    expect(mode_of(File.dirname(token_path))).to eq(0o700)
+    expect(mode_of(token_path)).to eq(0o600)
+  end
+
+  # Catches a mutation that only sets the mode at creation, which leaves an
+  # existing world-readable token file (from an older peadm) world-readable.
+  it 'tightens an existing 0644 token file to 0600 and replaces its content' do
+    FileUtils.mkdir_p(File.dirname(token_path))
+    File.write(token_path, 'old-token-that-is-longer-than-the-new-one')
+    File.chmod(0o644, token_path)
+    stub_token_response('new-token')
+
+    rbac_token.execute!
+
+    expect(mode_of(token_path)).to eq(0o600)
+    expect(File.binread(token_path)).to eq('new-token')
+  end
+
+  # Other tools write into this directory, so an existing one keeps its mode.
+  it 'leaves the mode of an existing token directory alone' do
+    FileUtils.mkdir_p(File.dirname(token_path))
+    File.chmod(0o755, File.dirname(token_path))
+    stub_token_response('new-token')
+
+    rbac_token.execute!
+
+    expect(mode_of(File.dirname(token_path))).to eq(0o755)
+  end
+
+  it 'writes the token to /root/.puppetlabs/token unless told otherwise' do
+    expect(described_class::DEFAULT_TOKEN_PATH).to eq('/root/.puppetlabs/token')
   end
 
   # The spec suite sets RSPEC_UNIT_TEST_MODE, so the script's entry point is

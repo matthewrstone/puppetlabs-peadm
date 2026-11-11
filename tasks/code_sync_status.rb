@@ -5,6 +5,7 @@ require 'net/https'
 require 'uri'
 require 'json'
 require 'puppet'
+require_relative '../files/cert_check'
 
 # CodeSyncStatus task class
 class CodeSyncStatus
@@ -22,7 +23,7 @@ class CodeSyncStatus
     client = Net::HTTP.new(Puppet.settings[:certname], 8140)
     client.use_ssl = true
     client.cert = @cert ||= OpenSSL::X509::Certificate.new(File.read(Puppet.settings[:hostcert]))
-    client.key = @key ||= OpenSSL::PKey::RSA.new(File.read(Puppet.settings[:hostprivkey]))
+    client.key = @key ||= PeadmCertCheck.load_key(File.read(Puppet.settings[:hostprivkey]))
     client.verify_mode = OpenSSL::SSL::VERIFY_PEER
     client.ca_file = Puppet.settings[:localcacert]
     client

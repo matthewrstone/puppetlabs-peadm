@@ -35,11 +35,11 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
         if: ${{ github.repository_owner == 'puppetlabs' }}
-      - name: Activate Ruby 3.1
+      - name: Activate Ruby 3.3
         uses: ruby/setup-ruby@v1
         if: ${{ github.repository_owner == 'puppetlabs' }}
         with:
-          ruby-version: '3.1'
+          ruby-version: '3.3'
           bundler-cache: true
       - name: Print bundle environment
         if: ${{ github.repository_owner == 'puppetlabs' }}
@@ -55,7 +55,11 @@ jobs:
         id: get-matrix
         run: |
           if [ '${{ github.repository_owner }}' == 'puppetlabs' ]; then
-            bundle exec matrix_from_metadata_v2
+            # puppet_litmus maps Puppet 8 to Ruby 3.2, but this repo's floor is Ruby 3.3, so rewrite it here.
+            # If the tool's output format changes the substitution does not match and 3.2 stays (safe); the shared ci.yml still runs Puppet 8 on Ruby 3.2.
+            MATRIX_OUT="$(mktemp)"
+            GITHUB_OUTPUT="$MATRIX_OUT" bundle exec matrix_from_metadata_v2
+            sed -E 's/"ruby_version":3\.2([,}])/"ruby_version":3.3\1/g' "$MATRIX_OUT" >> "$GITHUB_OUTPUT"
           else
             echo  "::set-output name=spec_matrix::{}"
           fi
@@ -100,12 +104,15 @@ jobs:
   # FrozenError from the old SSLv3 monkey patch under Ruby 4's frozen OpenSSL defaults
   # (PUP-12114), and facter's gemspec capping required_ruby_version at < 4.0 (now < 5.0).
   # Verified both locally (puppet-private@9.1.0 + facter-private@4.22.0 under Ruby 4.0.6)
-  # and from this job's own Actions run: 111 examples, 0 failures, 6 pendings. Green, so
-  # continue-on-error has been dropped -- this job now gives a real pass/fail signal.
+  # and from this job's own Actions run: 111 examples, 0 failures, 6 pendings.
+  # continue-on-error was re-added per D-09: Puppet 8 is the merge gate and this lane is a
+  # signal, so a red result is reported without blocking a merge. The job still tracks
+  # PE-45110.
   Ruby4Puppet9Experimental:
     name: 'Experimental: Puppet 9 / Ruby 4.0'
     if: ${{ github.repository_owner == 'puppetlabs' }}
     runs-on: ubuntu-latest
+    continue-on-error: true
     env:
       PUPPET_GEM_VERSION: ~> 9.0
       FACTER_GEM_VERSION: ~> 4.12
@@ -133,6 +140,58 @@ jobs:
       - name: Run parallel_spec tests
         run: |-
           bundle exec rake parallel_spec
+  # The next two jobs answer TST-02: does peadm run unchanged on Bolt 5.2 / Puppet Core 9?
+  # Bolt 5 comes from the private puppetcore gem source, so the lane needs the Puppet Core
+  # token. A job-level `if:` cannot read `secrets`, so check_token maps the secret into a
+  # step env and exports only a true/false output (the token itself is never echoed).
+  # Fork PRs get no secrets, so the lane skips there. The first result is recorded in the
+  # change ledger by plan 01-13.
+  check_token:
+    name: Check Puppet Core token
+    runs-on: ubuntu-latest
+    outputs:
+      has_token: ${{ steps.t.outputs.has_token }}
+    steps:
+      - id: t
+        env:
+          FORGE_TOKEN: ${{ secrets.PUPPET_FORGE_TOKEN }}
+        run: echo "has_token=$([ -n "$FORGE_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+  Bolt5Puppet9:
+    name: 'Experimental: Bolt 5.2 / Puppet 9 / Ruby 4.0'
+    needs: check_token
+    if: ${{ needs.check_token.outputs.has_token == 'true' && github.repository_owner == 'puppetlabs' }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      PUPPET_GEM_VERSION: ~> 9.0
+      FACTER_GEM_VERSION: ~> 4.12
+      BOLT_GEM_VERSION: '~> 5.2.1'
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+      - name: Configure forge authentication
+        env:
+          FORGE_TOKEN: ${{ secrets.PUPPET_FORGE_TOKEN || secrets.PUPPET_FORGE_TOKEN_PUBLIC }}
+        run: |
+          if [ -n "$FORGE_TOKEN" ]; then
+            echo "PUPPET_FORGE_TOKEN=$FORGE_TOKEN" >> $GITHUB_ENV
+            echo "BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM=forge-key:$FORGE_TOKEN" >> $GITHUB_ENV
+          fi
+      - name: Activate Ruby 4.0
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+      - name: Print bundle environment
+        run: |
+          echo ::group::bundler environment
+          bundle env
+          echo ::endgroup::
+      - name: Record the resolved Bolt version
+        run: bundle exec bolt --version
+      - name: Run parallel_spec tests
+        run: |-
+          bundle exec rake parallel_spec
   Coverage:
     name: Code Coverage
     if: ${{ github.repository_owner == 'puppetlabs' }}
@@ -144,10 +203,10 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v4
-      - name: Activate Ruby 3.1
+      - name: Activate Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.1'
+          ruby-version: '3.3'
           bundler-cache: true
       # puppetlabs_spec_helper has no parallel_spec equivalent of the spec:simplecov task, so
       # coverage runs as its own single, non-parallelized job rather than joining the Spec

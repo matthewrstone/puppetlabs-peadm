@@ -60,10 +60,10 @@ jobs:
             echo "PUPPET_FORGE_TOKEN=$FORGE_TOKEN" >> $GITHUB_ENV
             echo "BUNDLE_RUBYGEMS___PUPPETCORE__PUPPET__COM=forge-key:$FORGE_TOKEN" >> $GITHUB_ENV
           fi
-      - name: Activate Ruby 3.1
+      - name: Activate Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.1'
+          ruby-version: '3.3'
           bundler-cache: true
       - name: Print bundle environment
         if: ${{ github.repository_owner == 'puppetlabs' }}

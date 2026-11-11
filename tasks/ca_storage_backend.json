@@ -1,0 +1,10 @@
+{
+  "description": "Report whether Puppet Server keeps the CA in the pe-ca database or on the filesystem, by checking /etc/puppetlabs/puppetserver/bootstrap.cfg, /etc/puppetlabs/puppetserver/services.d/*.cfg and /opt/puppetlabs/server/apps/puppetserver/config/services.d/*.cfg. Returns backend (database, filesystem or unknown when none of those files exists), the file that matched, and the paths checked.",
+  "parameters": {},
+  "input_method": "environment",
+  "supports_noop": false,
+  "private": true,
+  "implementations": [
+    {"name": "ca_storage_backend.sh", "requirements": ["shell"]}
+  ]
+}

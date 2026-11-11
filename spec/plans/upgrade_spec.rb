@@ -78,6 +78,53 @@ describe 'peadm::upgrade' do
                     'version' => '2021.7.9')).to be_ok
   end
 
+  # FND-07: service_ready_timeout reaches every readiness wait. The orchestrator waits only
+  # run when a node uses the pcp transport (never the primary), so the compiler is pcp here.
+  context 'with a pcp-transport compiler' do
+    def run_upgrade_with_pcp_compiler(extra_params = {})
+      allow_standard_non_returning_calls
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::read_file')
+        .with_params('path' => '/opt/puppetlabs/server/pe_build')
+        .always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').always_return({ 'content' => '{}' })
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary,
+                                                         'pcp://compiler' => trusted_compiler).be_called_times(1)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check).be_called_times(1)
+      run_plan('peadm::upgrade',
+               { 'primary_host' => 'primary', 'compiler_hosts' => 'pcp://compiler', 'version' => '2021.7.9' }.merge(extra_params))
+    end
+
+    def expect_orchestrator_waits(timeout)
+      # bolt-spec with_params is strict equality: service, port and timeout.
+      # Catches a mutation that drops the deadline from one of the waits.
+      expect_task('peadm::wait_until_service_ready')
+        .with_params({ 'service' => 'orchestrator-service', 'port' => '8143', 'timeout' => timeout })
+        .with_targets('primary')
+        .always_return({})
+        .be_called_times(2) # one in upgrade-primary, one in modify-infra-certs
+    end
+
+    it 'passes service_ready_timeout to every orchestrator readiness wait' do
+      expect_orchestrator_waits(240)
+      expect(run_upgrade_with_pcp_compiler('service_ready_timeout' => 240)).to be_ok
+    end
+
+    it 'defaults the readiness deadline to 60 seconds' do
+      expect_orchestrator_waits(60)
+      expect(run_upgrade_with_pcp_compiler).to be_ok
+    end
+  end
+
+  # BoltSpec does not expose wait_time, so check the plan source: the PCP reconnect waits keep
+  # today's 120 s floor and grow with the operator's deadline.
+  it 'extends every wait_until_available call with the larger of 120 s and service_ready_timeout' do
+    source = File.read(File.expand_path('../../plans/upgrade.pp', __dir__))
+    calls = source.scan(%r{wait_until_available\([^)]*\)})
+    expect(calls.length).to be >= 2
+    expect(calls).to all(include('wait_time => max(120, $service_ready_timeout)'))
+  end
+
   it 'fails with a targeted error if pe_installer_source has a malformed tarball name' do
     allow_standard_non_returning_calls
 
@@ -148,6 +195,52 @@ describe 'peadm::upgrade' do
 
     expect(result).not_to be_ok
     expect(result.value.msg).to match(%r{run the Convert plan})
+  end
+
+  context 'when verifying the staged installer tarball' do
+    before(:each) do
+      allow_standard_non_returning_calls
+      expect_task('peadm::read_file')
+        .with_params('path' => '/opt/puppetlabs/server/pe_build')
+        .always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').always_return({ 'content' => '{}' })
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+    end
+
+    it 'verifies the tarball on the primary before stopping Puppet' do
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::verify_tarball').be_called_times(1)
+
+      expect(run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9')).to be_ok
+    end
+
+    # PE-42686: a corrupt tarball must stop the plan before any service is touched.
+    it 'fails before stopping Puppet when the tarball is corrupt' do
+      expect_task('peadm::verify_tarball').error_with('msg' => 'gzip integrity check failed', 'kind' => 'puppetlabs.tasks/task-error')
+      expect_command('systemctl stop puppet').not_be_called
+
+      result = run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9')
+
+      expect(result).not_to be_ok
+    end
+  end
+
+  it 'fails early when the requested version is older than the installed version' do
+    allow_standard_non_returning_calls
+    expect_task('peadm::read_file')
+      .with_params('path' => '/opt/puppetlabs/server/pe_build')
+      .always_return({ 'content' => "2025.11.3\n" })
+    expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').always_return({ 'content' => '{}' })
+    expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary)
+    expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+
+    result = run_plan('peadm::upgrade',
+                      'primary_host' => 'primary',
+                      'version' => '2025.10.0')
+
+    expect(result).not_to be_ok
+    expect(result.value.msg).to match(%r{does not support downgrades})
   end
 
   # PE-45737: this fail_plan (plans/upgrade.pp:171-183) is never exercised by
@@ -610,6 +703,59 @@ describe 'peadm::upgrade' do
                          'version'          => '2023.4.0',
                          'permit_unsafe_versions' => true)).to be_ok
       end
+    end
+  end
+
+  # P0-1 class (FND-04): begin_at_step is validated by its Peadm::UpgradeSteps type before the
+  # body runs, and node_group_environment (which reads pe.conf from the primary) is resolved in
+  # the body, so a bad step name fails before anything contacts the primary.
+  context 'begin_at_step validation and node_group_environment resolution' do
+    let(:pe_conf_staging) do
+      { 'content' => '{"pe_install::install::classification::pe_node_group_environment": "staging", ' \
+                     '"puppet_enterprise::master::recover_configuration::pe_environment": "staging"}' }
+    end
+
+    def stub_upgrade_calls(pe_conf_reads: nil)
+      allow_standard_non_returning_calls
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::read_file').with_params('path' => '/opt/puppetlabs/server/pe_build').always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary).be_called_times(1)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+      pe_conf = expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf')
+      pe_conf_reads.nil? ? pe_conf.always_return({ 'content' => '{}' }) : pe_conf.return { |targets:, **| Bolt::ResultSet.new(targets.map { |t| Bolt::Result.new(t, value: pe_conf_reads) }) }
+    end
+
+    # Catches: a revert to a remote default on node_group_environment (an invalid step would
+    # then run peadm::read_file on the primary first) or to an untyped begin_at_step.
+    it 'rejects an unknown begin_at_step naming the type and valid steps, before any task, command or plan runs' do
+      allow_out_message
+
+      result = run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9', 'begin_at_step' => 'bogus')
+
+      expect(result).not_to be_ok
+      expect(result.value.msg).to include('Peadm::UpgradeSteps')
+      expect(result.value.msg).to include('preparation')
+      expect(result.value.msg).to include('finalize')
+    end
+
+    # Catches: logging the raw (undef) parameter instead of the resolved value.
+    it 'reads node_group_environment from pe.conf when omitted and logs the resolved value' do
+      stub_upgrade_calls(pe_conf_reads: pe_conf_staging)
+      expect_out_message.with_params("Parameter 'node_group_environment': [staging]")
+
+      expect(run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9')).to be_ok
+    end
+
+    it 'does not read pe.conf for the environment when node_group_environment is given' do
+      allow_standard_non_returning_calls
+      expect_task('peadm::get_group_rules').return_for_targets('primary' => { '_output' => '{"rules": []}' }).be_called_times(2)
+      expect_task('peadm::read_file').with_params('path' => '/opt/puppetlabs/server/pe_build').always_return({ 'content' => '2021.7.3' })
+      expect_task('peadm::read_file').with_params('path' => '/etc/puppetlabs/enterprise/conf.d/pe.conf').not_be_called
+      expect_task('peadm::cert_data').return_for_targets('primary' => trusted_primary).be_called_times(1)
+      expect_task('peadm::check_pe_master_rules').always_return(pe_rule_check)
+      expect_out_message.with_params("Parameter 'node_group_environment': [dev]")
+
+      expect(run_plan('peadm::upgrade', 'primary_host' => 'primary', 'version' => '2021.7.9', 'node_group_environment' => 'dev')).to be_ok
     end
   end
 end

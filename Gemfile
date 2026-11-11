@@ -32,10 +32,10 @@ group :development do
   gem "logger",    require: false if ruby4_default_gems_removed
   gem "csv",       require: false if ruby4_default_gems_removed
   gem "base64",    require: false if ruby4_default_gems_removed
-  gem "voxpupuli-puppet-lint-plugins", '~> 5.0', require: false
+  gem "voxpupuli-puppet-lint-plugins", '~> 7.0', require: false
   gem "facterdb", '~> 1.18',                     require: false
   gem "metadata-json-lint", '~> 3.0',            require: false
-  gem "puppetlabs_spec_helper", '~> 6.0',        require: false
+  gem "puppetlabs_spec_helper", '~> 9.0',        require: false
   gem "rspec-puppet-facts", '~> 2.0',            require: false
   gem "codecov", '~> 0.2',                       require: false
   gem "simplecov-cobertura", '~> 3.2',            require: false
@@ -51,7 +51,9 @@ group :development do
   gem "rubocop-factory_bot", '~> 2.27.1',        require: false
   gem "rubocop-capybara", '~> 2.22.1',           require: false
   gem "rb-readline", '= 0.5.5',                  require: false, platforms: [:mswin, :mingw, :x64_mingw]
-  gem "bolt", '>= 4.0.0',                        require: false
+  # BOLT_GEM_VERSION is set by the Bolt5Puppet9 job in .github/workflows/spec.yml; it moves
+  # bolt to the puppetcore source block below so Bolt 5 resolves there.
+  gem "bolt", '>= 4.0.0',                        require: false unless ENV['BOLT_GEM_VERSION']
   gem "github_changelog_generator", '1.16.4',    require: false
   gem "octokit", '4.21.0',                       require: false
   gem "orchestrator_client", '< 0.7.1',          require: false
@@ -62,7 +64,7 @@ group :system_tests do
 end
 group :release_prep do
   gem "puppet-strings", '~> 4.0',         require: false
-  gem "puppetlabs_spec_helper", '~> 6.0', require: false
+  gem "puppetlabs_spec_helper", '~> 9.0', require: false
 end
 
 puppet_version = ENV['PUPPET_GEM_VERSION']
@@ -77,6 +79,7 @@ gems['puppet'] = location_for(puppet_version)
 # variables
 gems['facter'] = location_for(facter_version) if facter_version
 gems['hiera'] = location_for(hiera_version) if hiera_version
+gems['bolt'] = location_for(ENV['BOLT_GEM_VERSION']) if ENV['BOLT_GEM_VERSION']
 
 # When PUPPET_FORGE_TOKEN is set, resolve puppet/facter/hiera from the private
 # puppetcore gem source instead of rubygems.org. This is how pre-release builds

@@ -3,7 +3,6 @@
 require 'bundler'
 require 'puppet_litmus/rake_tasks' if Gem.loaded_specs.key? 'puppet_litmus'
 require 'puppetlabs_spec_helper/rake_tasks'
-require 'puppet-syntax/tasks/puppet-syntax'
 require 'github_changelog_generator/task' if Gem.loaded_specs.key? 'github_changelog_generator'
 require 'puppet-strings/tasks' if Gem.loaded_specs.key? 'puppet-strings'
 
@@ -89,4 +88,4 @@ EOM
   end
 end
 
-PuppetSyntax.exclude_paths = ["plans/**/*.pp", "spec/acceptance/**/plans/**/*.pp", "vendor/**/*"]
+PuppetlabsSyntax.exclude_paths.concat(["plans/**/*.pp", "spec/acceptance/**/plans/**/*.pp", "vendor/**/*"])

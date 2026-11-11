@@ -42,6 +42,15 @@ describe 'peadm::restore' do
     }
   end
 
+  # Content of peadm/node_group_environment.json in the backup, and of the
+  # primary's pe.conf. Both absent unless an example sets them.
+  let(:backup_environment_record) { nil }
+  let(:primary_pe_conf) { nil }
+
+  # What peadm::ca_storage_backend reports for the primary: database, filesystem or unknown.
+  let(:ca_backend) { 'filesystem' }
+  let(:ca_backend_checked) { ['/etc/puppetlabs/puppetserver/bootstrap.cfg', '/etc/puppetlabs/puppetserver/services.d/*.cfg'] }
+
   let(:cluster) { { 'params' => { 'primary_host' => 'primary', 'primary_postgresql_host' => 'postgres' } } }
 
   # PostgreSQL server major version of the restore target. 17 (PE 2025.11)
@@ -54,18 +63,30 @@ describe 'peadm::restore' do
     # Normalize whitespace around `=>` so the expected string matches the plan's
     # single-spaced hash rendering on every Ruby: Ruby 3.4's Hash#to_s already
     # spaces `=>`, older Rubies do not — collapse both to a single ` => `.
-    expect_out_message.with_params('cluster: ' + cluster.to_s.delete('"').gsub(%r{\s*=>\s*}, ' => '))
+    # Tests tagged `params_only: true` are rejected by the plan's parameter types
+    # before the body runs, so neither message is ever printed there.
+    expect_out_message.with_params('cluster: ' + cluster.to_s.delete('"').gsub(%r{\s*=>\s*}, ' => ')) unless example.metadata[:params_only]
     # Tests tagged `cluster_error: true` exercise the guard that fail_plan()s
     # before this point in the plan is ever reached, so the ldap-secret
     # message never fires there. Without this exclusion, expect_out_message
     # would register an unmet expectation and mask the assertions those tests
     # actually care about.
-    unless example.metadata[:cluster_error]
+    unless example.metadata[:cluster_error] || example.metadata[:params_only]
       expect_out_message.with_params('# Restoring ldap secret key if it exists')
     end
     allow_task('peadm::puppet_runonce')
     allow_task('peadm::get_psql_version').always_return({ 'version' => psql_version })
     allow_task('peadm::wait_until_service_ready')
+    allow_task('peadm::ca_storage_backend').return do |targets:, **|
+      value = { 'backend' => ca_backend, 'source' => nil, 'checked' => ca_backend_checked }
+      Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: value) })
+    end
+    # Two files are read through peadm::read_file: the environment record inside
+    # the backup, and the primary's pe.conf. nil content means "no such file".
+    allow_task('peadm::read_file').return do |targets:, params:, **|
+      content = params['path'].end_with?('/peadm/node_group_environment.json') ? backup_environment_record : primary_pe_conf
+      Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'content' => content }) })
+    end
   end
 
   # only run for tests that have the :valid_cluster tag
@@ -234,15 +255,10 @@ describe 'peadm::restore' do
       call_log = []
       allow_any_command.return do |targets:, command:, **|
         call_log << command
-        # The PE-47558 ca-database-restore check (restore.pp) shells out to
-        # probe for a pe-ca dump and a database-backed CA; this fixture's
-        # backup has neither, so report 'skip' to keep this test's existing
-        # scope (puppetdb export/import ordering), not the ca-restore path.
-        if command.include?('pe-ca.dump.d')
-          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => 'skip' }) })
-        else
-          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
-        end
+        # This fixture's CA is filesystem-backed (the default ca_backend above), so the
+        # PE-47558 pe-ca restore path is not taken: this test is about the puppetdb
+        # export/import ordering.
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
       end
       allow_task('peadm::backup_classification')
       allow_task('peadm::transform_classification_groups')
@@ -273,30 +289,97 @@ describe 'peadm::restore' do
     # certificates issued afterwards from the restored CA files (the new
     # primary's host cert) must be synced into the database at the end, or
     # the CA reuses their serials.
-    it 'stops the agent first and syncs the CA into the database on a pe-ca restore', valid_cluster: true do
-      call_log = []
-      allow_any_command.return do |targets:, command:, **|
-        call_log << command
-        stdout = command.include?('pe-ca.dump.d') ? 'restore' : ''
-        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => stdout }) })
+    context 'with a database-backed CA' do
+      let(:ca_backend) { 'database' }
+      let(:dump_check) { 'test -d /input/file/ca/pe-ca.dump.d' }
+      let(:ca_import) { '/opt/puppetlabs/bin/puppetserver ca storage --import' }
+
+      # Runs the migration with every command recorded. The test -d answer is
+      # 0 (dump present) unless dump_present is false.
+      def run_migration(dump_present: true)
+        call_log = []
+        allow_any_command.return do |targets:, command:, **|
+          call_log << command
+          result = if command == dump_check && !dump_present
+                     Bolt::Result.for_command(targets.first, { 'stdout' => '', 'stderr' => '', 'exit_code' => 1 }, 'command', command, [])
+                   else
+                     Bolt::Result.new(targets.first, value: { 'stdout' => '' })
+                   end
+          Bolt::ResultSet.new([result])
+        end
+        allow_task('peadm::backup_classification')
+        allow_task('peadm::transform_classification_groups')
+        allow_task('peadm::restore_classification')
+        allow_task('peadm::rbac_token')
+        expect(run_plan('peadm::restore', migration_params)).to be_ok
+        call_log
       end
-      allow_task('peadm::backup_classification')
-      allow_task('peadm::transform_classification_groups')
-      allow_task('peadm::restore_classification')
-      allow_task('peadm::rbac_token')
 
-      expect(run_plan('peadm::restore', migration_params)).to be_ok
+      it 'stops the agent first and syncs the CA into the database on a pe-ca restore', valid_cluster: true do
+        call_log = run_migration
 
-      ca_import = '/opt/puppetlabs/bin/puppetserver ca storage --import'
-      expect(call_log).to include("systemctl stop puppet.service && systemctl stop pe-puppetserver\n")
-      pe_ca_restore = call_log.index { |c| c.include?('pg_restore') && c.include?('dbname=pe-ca') }
-      drop_pglogical = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP SCHEMA IF EXISTS pglogical CASCADE') }
-      drop_extension = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP EXTENSION IF EXISTS pglogical CASCADE') }
-      expect(pe_ca_restore).not_to be_nil
-      expect(drop_pglogical).to be > pe_ca_restore
-      expect(drop_extension).to be > pe_ca_restore
-      expect(call_log.count(ca_import)).to eq(1)
-      expect(call_log.index(ca_import)).to be > call_log.index("/opt/puppetlabs/bin/puppet-infrastructure configure --no-recover\n")
+        expect(call_log).to include("systemctl stop puppet.service && systemctl stop pe-puppetserver\n")
+        pe_ca_restore = call_log.index { |c| c.include?('pg_restore') && c.include?('dbname=pe-ca') }
+        drop_pglogical = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP SCHEMA IF EXISTS pglogical CASCADE') }
+        drop_extension = call_log.index { |c| c.include?("-d 'pe-ca'") && c.include?('DROP EXTENSION IF EXISTS pglogical CASCADE') }
+        expect(pe_ca_restore).not_to be_nil
+        expect(drop_pglogical).to be > pe_ca_restore
+        expect(drop_extension).to be > pe_ca_restore
+        expect(call_log.count(ca_import)).to eq(1)
+        expect(call_log.index(ca_import)).to be > call_log.index("/opt/puppetlabs/bin/puppet-infrastructure configure --no-recover\n")
+      end
+
+      # The dump is checked on the primary being restored, and only then is it used.
+      it 'checks that the backup has a pe-ca dump before restoring it', valid_cluster: true do
+        call_log = run_migration
+        expect(call_log).to include(dump_check)
+        expect(call_log.index(dump_check)).to be < call_log.index { |c| c.include?('pg_restore') && c.include?('dbname=pe-ca') }
+      end
+
+      # Catches a mutation that restores pe-ca whenever the CA is database-backed,
+      # even for a backup that never dumped it.
+      it 'does not restore pe-ca when the backup has no dump', valid_cluster: true do
+        call_log = run_migration(dump_present: false)
+        expect(call_log.grep(%r{dbname=pe-ca})).to be_empty
+        expect(call_log).not_to include(ca_import)
+      end
+    end
+
+    # Catches a mutation that restores pe-ca when the CA is not database-backed.
+    context 'with a filesystem-backed CA' do
+      it 'neither checks for nor restores a pe-ca dump', valid_cluster: true do
+        call_log = []
+        allow_any_command.return do |targets:, command:, **|
+          call_log << command
+          Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: {}) })
+        end
+        allow_task('peadm::backup_classification')
+        allow_task('peadm::transform_classification_groups')
+        allow_task('peadm::restore_classification')
+        allow_task('peadm::rbac_token')
+        expect(run_plan('peadm::restore', migration_params)).to be_ok
+        expect(call_log.grep(%r{pe-ca})).to be_empty
+      end
+    end
+
+    # "Could not tell" keeps today's behaviour (no pe-ca restore) but says so,
+    # naming where the plan looked, instead of guessing silently.
+    context 'when the CA backend cannot be determined' do
+      let(:ca_backend) { 'unknown' }
+
+      it 'warns, naming the paths checked, and skips the pe-ca restore', valid_cluster: true do
+        warning = 'WARNING: could not tell whether the CA is database-backed: none of the Puppet Server bootstrap files exists on the primary ' \
+                  "(checked #{ca_backend_checked.join(', ')}). The pe-ca database is not restored."
+        allow_any_command
+        allow_task('peadm::backup_classification')
+        allow_task('peadm::transform_classification_groups')
+        allow_task('peadm::restore_classification')
+        allow_task('peadm::rbac_token')
+        expect_out_message.with_params(warning)
+        expect_command(%r{pe-ca}).not_be_called
+
+        expect(run_plan('peadm::restore', migration_params)).to be_ok
+      end
     end
 
     # PE-47009: a permanent failure (wrong console_password) is tagged with
@@ -478,12 +561,10 @@ describe 'peadm::restore' do
     end
 
     it 'restores only ca/certs when recovery_opts.ca is the only flag set', valid_cluster: true do
-      # PE-47558: with ca => true and config => false, restore.pp probes for a
-      # pe-ca dump + database-backed CA before the certs restore. This
-      # fixture's backup has neither, so report 'skip' -- this test covers the
-      # pre-existing ca/code/config isolation, not the new ca-database path.
-      expect_command("test -d /input/file/ca/pe-ca.dump.d   && grep -v '^[[:space:]]*#' /etc/puppetlabs/puppetserver/bootstrap.cfg     | grep -q '^[[:space:]]*puppetlabs.services.ca.database-storage-service/'   && echo restore || echo skip\n")
-        .always_return('stdout' => 'skip')
+      # PE-47558: with ca => true and config => false, restore.pp asks the
+      # peadm::ca_storage_backend task before the certs restore. This fixture's
+      # CA is filesystem-backed (the default above), so there is no pe-ca
+      # restore: this test covers the ca/code/config isolation, not that path.
       expect_command(ca_command)
       expect_command(code_command).not_be_called
       expect_command(config_command).not_be_called
@@ -538,6 +619,156 @@ describe 'peadm::restore' do
       expect_command("cp -rp /input/file/orchestrator/secrets/* /etc/puppetlabs/orchestration-services/conf.d/secrets/ \n")
 
       expect(run_plan('peadm::restore', orchestrator_only_params)).to be_ok
+    end
+  end
+
+  # PE-46598: puppet-backup restore targets the production environment unless
+  # it is given --pe-environment. peadm::backup records the cluster's
+  # environment in the backup and restore passes it on, for every restore call.
+  context 'with a non-production node group environment' do
+    let(:dev_record) { '{"node_group_environment": "dev"}' }
+    let(:dev_pe_conf) do
+      '{"pe_install::install::classification::pe_node_group_environment": "dev", "puppet_enterprise::master::recover_configuration::pe_environment": "dev"}'
+    end
+    let(:restore_commands) do
+      # the puppet-backup restore commands the plan ran, in order
+      call_log = []
+      allow_any_command.return do |targets:, command:, **|
+        call_log << command
+        Bolt::ResultSet.new(targets.map { |target| Bolt::Result.new(target, value: { 'stdout' => '' }) })
+      end
+      call_log
+    end
+    let(:all_scopes) do
+      { 'targets' => 'primary', 'input_file' => backup_tarball, 'restore_type' => 'custom',
+        'restore' => { 'activity' => false, 'classifier' => false, 'orchestrator' => false, 'puppetdb' => false, 'rbac' => false,
+                       'ca' => true, 'code' => true, 'config' => true } }
+    end
+
+    def puppet_backup_restores(call_log)
+      call_log.select { |c| c.include?('puppet-backup restore') }
+    end
+
+    # Production clusters run byte-identical commands: no flag when nothing says otherwise.
+    it 'adds no flag when neither the backup nor pe.conf names an environment', valid_cluster: true do
+      expect_out_message.with_params("# Restoring into the 'production' environment (from pe.conf on the primary)")
+      calls = restore_commands
+      expect(run_plan('peadm::restore', recovery_params)).to be_ok
+      expect(puppet_backup_restores(calls)).to eq(["/opt/puppetlabs/bin/puppet-backup restore   --scope=certs,code,config   --tempdir=/input/file   --force   /input/file/recovery/pe_backup-*tgz\n"])
+    end
+
+    context 'when the backup records dev' do
+      let(:backup_environment_record) { dev_record }
+
+      it 'adds --pe-environment=dev to the recovery restore', valid_cluster: true do
+        expect_out_message.with_params("# Restoring into the 'dev' environment (from the backup)")
+        calls = restore_commands
+        expect(run_plan('peadm::restore', recovery_params)).to be_ok
+        expect(puppet_backup_restores(calls)).to eq(["/opt/puppetlabs/bin/puppet-backup restore   --scope=certs,code,config   --tempdir=/input/file   --force --pe-environment=dev   /input/file/recovery/pe_backup-*tgz\n"])
+      end
+
+      it 'adds --pe-environment=dev to the ca, code and config restores of a custom restore', valid_cluster: true do
+        calls = restore_commands
+        expect(run_plan('peadm::restore', all_scopes)).to be_ok
+        restores = puppet_backup_restores(calls)
+        expect(restores.length).to eq(3)
+        expect(restores).to all(include('--force --pe-environment=dev'))
+        expect(restores.map { |c| c[%r{--scope=(\w+)}, 1] }).to eq(['certs', 'code', 'config'])
+      end
+
+      # Catches a mutation that lets the backup's record beat an explicit choice.
+      it 'uses the node_group_environment parameter over the backup record', valid_cluster: true do
+        expect_out_message.with_params("# Restoring into the 'staging' environment (from the node_group_environment parameter)")
+        calls = restore_commands
+        expect(run_plan('peadm::restore', recovery_params.merge('node_group_environment' => 'staging'))).to be_ok
+        expect(puppet_backup_restores(calls).first).to include('--force --pe-environment=staging')
+      end
+
+      it 'does not read the backup record when the parameter is given', valid_cluster: true do
+        restore_commands
+        expect_task('peadm::read_file').with_params('path' => '/input/file/peadm/node_group_environment.json').not_be_called
+        expect(run_plan('peadm::restore', recovery_params.merge('node_group_environment' => 'staging'))).to be_ok
+      end
+    end
+
+    context 'when the backup records production' do
+      let(:backup_environment_record) { '{"node_group_environment": "production"}' }
+      let(:primary_pe_conf) { dev_pe_conf }
+
+      it 'adds no flag, whatever pe.conf says', valid_cluster: true do
+        calls = restore_commands
+        expect(run_plan('peadm::restore', recovery_params)).to be_ok
+        expect(puppet_backup_restores(calls).first).not_to include('--pe-environment')
+      end
+    end
+
+    context 'when the backup has no record (taken before the record existed)' do
+      let(:primary_pe_conf) { dev_pe_conf }
+
+      it 'falls back to the environment in the primary pe.conf', valid_cluster: true do
+        expect_out_message.with_params("# Restoring into the 'dev' environment (from pe.conf on the primary)")
+        calls = restore_commands
+        expect(run_plan('peadm::restore', recovery_params)).to be_ok
+        expect(puppet_backup_restores(calls).first).to include('--force --pe-environment=dev')
+      end
+    end
+
+    context 'when the backup record is not a valid environment name' do
+      let(:backup_environment_record) { '{"node_group_environment": "../etc"}' }
+
+      # The name goes onto a root command line; refuse it before any restore call.
+      it 'fails before any restore is attempted', valid_cluster: true, cluster_error: true do
+        expect_command(%r{puppet-backup restore}).not_be_called
+        allow_any_command
+
+        result = run_plan('peadm::restore', recovery_params)
+        expect(result).not_to be_ok
+        expect(result.value.msg).to match(%r{does not hold a valid node_group_environment})
+      end
+    end
+
+    context 'when the backup record is not JSON' do
+      let(:backup_environment_record) { 'dev' }
+
+      it 'fails before any restore is attempted', valid_cluster: true, cluster_error: true do
+        allow_any_command
+        result = run_plan('peadm::restore', recovery_params)
+        expect(result).not_to be_ok
+        expect(result.value.msg).to match(%r{does not hold a valid node_group_environment})
+      end
+    end
+  end
+
+  # FND-07: the wait for PE services after the restore takes the operator's
+  # deadline instead of the fixed 60 s.
+  context 'service_ready_timeout' do
+    it 'defaults to 60', valid_cluster: true do
+      allow_any_command
+      expect_task('peadm::wait_until_service_ready').with_params('service' => 'all', 'port' => '8140', 'timeout' => 60)
+      expect(run_plan('peadm::restore', recovery_params)).to be_ok
+    end
+
+    it 'is passed to the readiness wait', valid_cluster: true do
+      allow_any_command
+      expect_task('peadm::wait_until_service_ready').with_params('service' => 'all', 'port' => '8140', 'timeout' => 300)
+      expect(run_plan('peadm::restore', recovery_params.merge('service_ready_timeout' => 300))).to be_ok
+    end
+  end
+
+  # Parameter types are checked before the plan body runs.
+  context 'parameter validation' do
+    let(:params) { { 'targets' => 'primary', 'input_file' => backup_tarball } }
+
+    it 'rejects a node_group_environment that is not a valid environment name', params_only: true do
+      result = run_plan('peadm::restore', params.merge('node_group_environment' => 'Dev-1'))
+      expect(result).not_to be_ok
+      expect(result.value.msg).to match(%r{parameter 'node_group_environment' expects a match for Peadm::Pe_environment})
+    end
+
+    it 'rejects a service_ready_timeout of 0', params_only: true do
+      result = run_plan('peadm::restore', params.merge('service_ready_timeout' => 0))
+      expect(result).not_to be_ok
+      expect(result.value.msg).to match(%r{parameter 'service_ready_timeout' expects an Integer\[1\] value})
     end
   end
 end

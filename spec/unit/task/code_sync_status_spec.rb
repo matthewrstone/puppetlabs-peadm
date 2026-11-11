@@ -1,4 +1,5 @@
 require 'spec_helper'
+require 'tmpdir'
 require_relative '../../../tasks/code_sync_status'
 
 describe CodeSyncStatus do
@@ -32,7 +33,7 @@ describe CodeSyncStatus do
                                                       localcacert: '/etc/puppetlabs/puppet/ssl/certs/ca.pem')
       allow(File).to receive(:read).and_return('dummy-pem-contents')
       allow(OpenSSL::X509::Certificate).to receive(:new).and_return(instance_double(OpenSSL::X509::Certificate))
-      allow(OpenSSL::PKey::RSA).to receive(:new).and_return(instance_double(OpenSSL::PKey::RSA))
+      allow(PeadmCertCheck).to receive(:load_key).and_return(instance_double(OpenSSL::PKey::PKey))
       allow(Net::HTTP).to receive(:new).with('primary.example.com', 8140).and_return(https_dbl)
       allow(https_dbl).to receive(:use_ssl=)
       allow(https_dbl).to receive(:cert=)
@@ -51,6 +52,49 @@ describe CodeSyncStatus do
       allow(https_dbl).to receive(:request).with(request_dbl).and_return(response)
 
       expect(task.send(:api_status)).to eq('file-sync-storage-service' => {})
+    end
+  end
+
+  describe '#https_client host key (P1-11)' do
+    let(:dir) { Dir.mktmpdir('code_sync_status_spec') }
+    let(:key_file) { File.join(dir, 'primary.key.pem') }
+    let(:cert_file) { '/etc/puppetlabs/puppet/ssl/certs/primary.pem' }
+    let(:host_key) { instance_double(OpenSSL::PKey::PKey) }
+
+    before(:each) do
+      allow(Puppet).to receive(:settings).and_return(certname: 'primary.example.com',
+                                                      hostcert: cert_file,
+                                                      hostprivkey: key_file,
+                                                      localcacert: '/etc/puppetlabs/puppet/ssl/certs/ca.pem')
+      allow(OpenSSL::X509::Certificate).to receive(:new).and_return(instance_double(OpenSSL::X509::Certificate))
+    end
+
+    after(:each) { FileUtils.remove_entry(dir) }
+
+    # Catches a mutation that goes back to a key-type-specific constructor, or
+    # that hands the client something other than what the shared checker loaded.
+    it 'sets client.key to what PeadmCertCheck.load_key returns for the host key file content' do
+      File.write(key_file, 'host-key-pem')
+      allow(File).to receive(:read).and_call_original
+      allow(File).to receive(:read).with(cert_file).and_return('dummy-cert-pem')
+      allow(PeadmCertCheck).to receive(:load_key).with('host-key-pem').and_return(host_key)
+
+      expect(task.send(:https_client).key).to be(host_key)
+    end
+
+    # Catches a mutation back to OpenSSL::PKey::RSA.new, which raised
+    # `incorrect pkey type` for an EC host key (CASE-032 reported the same
+    # RSA-only parsing against cd4peadm).
+    it 'builds the client from a real EC host key without raising' do
+      ec_key = OpenSSL::PKey::EC.generate('prime256v1')
+      File.write(key_file, ec_key.private_to_pem)
+      allow(File).to receive(:read).and_call_original
+      allow(File).to receive(:read).with(cert_file).and_return('dummy-cert-pem')
+
+      client = task.send(:https_client)
+
+      expect(client.key.private_to_der).to eq(ec_key.private_to_der)
+      expect(client.verify_mode).to eq(OpenSSL::SSL::VERIFY_PEER)
     end
   end
 

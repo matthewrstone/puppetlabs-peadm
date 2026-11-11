@@ -188,7 +188,7 @@ describe CheckPeMasterRules do
       response = instance_double(Net::HTTPOK, code: '200', body: [].to_json)
       allow(https_dbl).to receive(:request).with(pdb_request_dbl).and_return(response)
 
-      expect(task.check_nodes_with_legacy_compiler_oid).to eq('nodes_found' => false, 'count' => 0, 'nodes' => [])
+      expect(task.check_nodes_with_legacy_compiler_oid).to eq('nodes_found' => false, 'count' => 0, 'nodes' => [], 'ignored_nodes' => [])
     end
 
     # Catches a mutation that returns raw node hashes instead of mapping
@@ -198,7 +198,31 @@ describe CheckPeMasterRules do
                                                 body: [{ 'certname' => 'legacy-a.example.com', 'trusted.extensions' => {} }].to_json)
       allow(https_dbl).to receive(:request).with(pdb_request_dbl).and_return(response)
 
-      expect(task.check_nodes_with_legacy_compiler_oid).to eq('nodes_found' => true, 'count' => 1, 'nodes' => ['legacy-a.example.com'])
+      expect(task.check_nodes_with_legacy_compiler_oid).to eq('nodes_found' => true, 'count' => 1, 'nodes' => ['legacy-a.example.com'], 'ignored_nodes' => [])
+    end
+
+    # CASE-050: peadm::convert treats the extension value 'false' as a modern
+    # compiler, so those nodes must be listed but must not block the upgrade.
+    it "does not count nodes whose legacy compiler OID is 'false'" do
+      oid = '1.3.6.1.4.1.34380.1.1.9814'
+      rows = [
+        { 'certname' => 'modern.example.com', 'trusted.extensions' => { oid => 'false' } },
+        { 'certname' => 'legacy.example.com', 'trusted.extensions' => { oid => 'true' } },
+      ]
+      response = instance_double(Net::HTTPOK, code: '200', body: rows.to_json)
+      allow(https_dbl).to receive(:request).with(pdb_request_dbl).and_return(response)
+
+      expect(task.check_nodes_with_legacy_compiler_oid).to eq(
+        'nodes_found' => true, 'count' => 1, 'nodes' => ['legacy.example.com'], 'ignored_nodes' => ['modern.example.com'],
+      )
+    end
+
+    it "reports no nodes found when every node's legacy compiler OID is 'false'" do
+      rows = [{ 'certname' => 'modern.example.com', 'trusted.extensions' => { '1.3.6.1.4.1.34380.1.1.9814' => 'false' } }]
+      response = instance_double(Net::HTTPOK, code: '200', body: rows.to_json)
+      allow(https_dbl).to receive(:request).with(pdb_request_dbl).and_return(response)
+
+      expect(task.check_nodes_with_legacy_compiler_oid['nodes_found']).to eq(false)
     end
 
     it 'raises a doubly-wrapped error on a non-200 PuppetDB response' do
@@ -250,7 +274,7 @@ describe CheckPeMasterRules do
       expect(STDOUT).to receive(:puts) do |json_str|
         parsed = JSON.parse(json_str)
         expect(parsed['updated']).to eq(false)
-        expect(parsed['message']).to eq('PE Master rules are updated, but nodes with legacy compiler OID still exist')
+        expect(parsed['message']).to match(%r{\A.*1 node\(s\) still have the legacy compiler OID .*: x\. Run the peadm::convert plan})
       end
 
       task.execute!
